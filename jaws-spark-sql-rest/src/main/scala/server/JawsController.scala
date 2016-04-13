@@ -26,7 +26,7 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
   initialize()
 
   // initialize parquet tables
-  initializeParquetTables()
+  initializeParquetTables("tempUser") ///ChangeMe!
 
   implicit val spraySystem: ActorSystem = ActorSystem("spraySystem")
 

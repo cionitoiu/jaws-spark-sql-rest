@@ -106,7 +106,7 @@ class RunScriptTask(dals: DAL, hiveContext: HiveContextWrapper,
       case false =>
         Option(result) match {
           case None => Configuration.log4j.debug("[RunScriptTask] result is null")
-          case _    => dals.resultsDal.setResults(uuid, result)
+          case _    => dals.resultsDal.setResults(uuid, result, userId)
         }
         dals.loggingDal.setState(uuid, QueryState.DONE, userId)
         dals.loggingDal.setExecutionTime(uuid, executionTime, userId)
@@ -134,7 +134,7 @@ class RunParquetScriptTask(dals: DAL, hiveContext: HiveContextWrapper,
   override def run() {
     implicit val timeout = Timeout(Configuration.timeout, TimeUnit.MILLISECONDS)
     val future = ask(JawsController.balancerActor,
-                     RegisterTableMessage(runMessage.table, runMessage.tablePath, runMessage.namenode))
+                     RegisterTableMessage(runMessage.table, runMessage.tablePath, runMessage.namenode, runMessage.userId))
       .map(innerFuture => innerFuture.asInstanceOf[Future[Any]])
       .flatMap(identity)
 

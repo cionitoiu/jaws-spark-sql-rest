@@ -31,21 +31,22 @@ class GetResultsApiActor(hdfsConf: org.apache.hadoop.conf.Configuration, hiveCon
 
     case message: GetResultsMessage =>
       {
-        Configuration.log4j.info(s"[GetResultsMessage]: retrieving results for: ${message.queryID} in the ${message.format}")
+        Configuration.log4j.info(s"[GetResultsMessage]: retrieving results for: ${message.queryID} in " +
+                                 s"the ${message.format} and user ${message.userId}")
         val currentSender = sender
         val getResultsFuture = future {
 
           val (offset, limit) = getOffsetAndLimit(message)
-          val metaInfo = dals.loggingDal.getMetaInfo(message.queryID, "tempUser") ///change
+          val metaInfo = dals.loggingDal.getMetaInfo(message.queryID, message.userId) ///change
 
           metaInfo.resultsDestination match {
             // cassandra
             case 0 =>
               val endIndex = offset + limit
               message.format match {
-                case AVRO_BINARY_FORMAT => new AvroBinaryResult(getDBAvroResults(message.queryID, offset, endIndex))
-                case AVRO_JSON_FORMAT   => getDBAvroResults(message.queryID, offset, endIndex).result
-                case _                  => getCustomResults(message.queryID, offset, endIndex)
+                case AVRO_BINARY_FORMAT => new AvroBinaryResult(getDBAvroResults(message.queryID, offset, endIndex, message.userId))
+                case AVRO_JSON_FORMAT   => getDBAvroResults(message.queryID, offset, endIndex, message.userId).result
+                case _                  => getCustomResults(message.queryID, offset, endIndex, message.userId)
               }
 
             //hdfs
@@ -109,14 +110,14 @@ class GetResultsApiActor(hdfsConf: org.apache.hadoop.conf.Configuration, hiveCon
     (offset, limit)
   }
 
-  private def getDBAvroResults(queryID: String, offset: Int, limit: Int) = {
-    val result = dals.resultsDal.getAvroResults(queryID)
+  private def getDBAvroResults(queryID: String, offset: Int, limit: Int, userId: String) = {
+    val result = dals.resultsDal.getAvroResults(queryID, userId)
     val lastResultIndex = if (limit > result.result.length) result.result.length else limit
     new AvroResult(result.schema, result.result.slice(offset, lastResultIndex))
   }
 
-  private def getCustomResults(queryID: String, offset: Int, limit: Int) = {
-    val result = dals.resultsDal.getCustomResults(queryID)
+  private def getCustomResults(queryID: String, offset: Int, limit: Int, userId: String) = {
+    val result = dals.resultsDal.getCustomResults(queryID, userId)
     val lastResultIndex = if (limit > result.result.length) result.result.length else limit
     new CustomResult(result.schema, result.result.slice(offset, lastResultIndex))
   }

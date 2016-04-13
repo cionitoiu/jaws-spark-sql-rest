@@ -9,17 +9,17 @@ import com.xpatterns.jaws.data.DTO.CustomResult
  * Created by emaorhian
  */
 trait TJawsResults {
-  def setAvroResults (uuid: String, avroResults : AvroResult)
-  def getAvroResults(uuid: String) : AvroResult
-  def setCustomResults(uuid: String, results: CustomResult)
-  def getCustomResults(uuid: String): CustomResult
-  
-  def setResults(uuid: String, results: ResultsConverter) {
-    Utils.TryWithRetry { 
-      
-      setAvroResults(uuid, results.toAvroResults())
-      setCustomResults(uuid, results.toCustomResults)
+  def setAvroResults (uuid: String, avroResults : AvroResult, userId: String)
+  def getAvroResults(uuid: String, userId: String) : AvroResult
+  def setCustomResults(uuid: String, results: CustomResult, userId: String)
+  def getCustomResults(uuid: String, userId: String): CustomResult
+
+  def setResults(uuid: String, results: ResultsConverter, userId: String) {
+    Utils.TryWithRetry {
+
+      setAvroResults(uuid, results.toAvroResults(), userId)
+      setCustomResults(uuid, results.toCustomResults, userId)
     }
   }
-  def deleteResults(uuid: String)
+  def deleteResults(uuid: String, userId: String)
 }

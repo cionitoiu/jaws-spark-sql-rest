@@ -16,7 +16,6 @@ import spray.http.{ StatusCodes, HttpHeaders, HttpMethods, MediaTypes }
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.marshalling.ToResponseMarshallable.isMarshallable
 import spray.json.DefaultJsonProtocol._
-import spray.routing.Directive.pimpApply
 import scala.concurrent.duration.Duration._
 import scala.util.{Failure, Success, Try}
 import scala.concurrent.{Await, Future}
@@ -40,34 +39,36 @@ trait ParquetApi extends BaseApi with CORSDirectives {
    * Initialize the parquet tables. Each time the server is started the parquet files, that are used as tables, are
    * registered as temporary table.
    */
-  def initializeParquetTables() {
-    Configuration.log4j.info("Initializing parquet tables on the current spark context")
-    val parquetTables = dals.parquetTableDal.listParquetTables()
+  def initializeParquetTables(userId: String) {
+    Configuration.log4j.info("Initializing parquet tables on the current spark context for user" + userId)
+    val parquetTables = dals.parquetTableDal.listParquetTables(userId)
 
     parquetTables.foreach(pTable => {
       val newConf = new org.apache.hadoop.conf.Configuration(hdfsConf)
       newConf.set("fs.defaultFS", pTable.namenode)
       if (Utils.checkFileExistence(pTable.filePath, newConf)) {
         // Send message to register the parquet table
-        val future = ask(registerParquetTableActor, RegisterTableMessage(pTable.name, pTable.filePath, pTable.namenode))
+        val future = ask(registerParquetTableActor, RegisterTableMessage(pTable.name, pTable.filePath, pTable.namenode, userId))
 
         // When registering is complete display the proper message or in case of failure delete the table.
         Await.ready(future, Inf).value.get match {
           case Success(x) => x match {
             case e: ErrorMessage =>
-              Configuration.log4j.warn(s"The table ${pTable.name} at path ${pTable.filePath} failed during registration with message : \n ${e.message}\n The table will be deleted!")
-              dals.parquetTableDal.deleteParquetTable(pTable.name)
+              Configuration.log4j.warn(s"The table ${pTable.name} at path ${pTable.filePath} failed during registration " +
+                                       s"with message : \n ${e.message}\n The table will be deleted!")
+              dals.parquetTableDal.deleteParquetTable(pTable.name, userId)
 
             case result: String => Configuration.log4j.info(result)
           }
           case Failure(ex) =>
-            Configuration.log4j.warn(s"The table ${pTable.name} at path ${pTable.filePath} failed during registration with the following stack trace : \n ${getCompleteStackTrace(ex)}\n The table will be deleted!")
-            dals.parquetTableDal.deleteParquetTable(pTable.name)
+            Configuration.log4j.warn(s"The table ${pTable.name} at path ${pTable.filePath} failed during registration " +
+                                     s"with the following stack trace : \n ${getCompleteStackTrace(ex)}\n The table will be deleted!")
+            dals.parquetTableDal.deleteParquetTable(pTable.name, userId)
         }
 
       } else {
         Configuration.log4j.warn(s"The table ${pTable.name} doesn't exists at path ${pTable.filePath}. The table will be deleted")
-        dals.parquetTableDal.deleteParquetTable(pTable.name)
+        dals.parquetTableDal.deleteParquetTable(pTable.name, userId)
       }
     })
   }
@@ -109,7 +110,7 @@ trait ParquetApi extends BaseApi with CORSDirectives {
                   validateCondition(table != null && !table.trim.isEmpty, Configuration.TABLE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
                     entity(as[String]) { query: String =>
                       validateCondition(query != null && !query.trim.isEmpty, Configuration.SCRIPT_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-                        validateCondition(overwrite || !dals.parquetTableDal.tableExists(table),
+                        validateCondition(overwrite || !dals.parquetTableDal.tableExists(table, userId),
                           Configuration.TABLE_ALREADY_EXISTS_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
                           respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
                             Configuration.log4j.info(s"The tablePath is $tablePath on namenode $pathType and the table name is $table")
@@ -189,29 +190,33 @@ trait ParquetApi extends BaseApi with CORSDirectives {
    * </ul>
    */
   private def parquetTablePostRoute = post {
-    parameters('name.as[String], 'path.as[String], 'pathType.as[String] ? "hdfs", 'overwrite.as[Boolean] ? false) {
-      (name, path, pathType, overwrite) =>
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-          validateCondition(path != null && !path.trim.isEmpty, Configuration.FILE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-            validateCondition("hdfs".equals(pathType) || "tachyon".equals(pathType), Configuration.FILE_PATH_TYPE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-              validateCondition(name != null && !name.trim.isEmpty, Configuration.TABLE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-                validateCondition(overwrite || !dals.parquetTableDal.tableExists(name), Configuration.TABLE_ALREADY_EXISTS_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-                  respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
-                    Configuration.log4j.info(s"Registering table $name having the path $path on node $pathType")
+    securityFilter { userId =>
+      parameters('name.as[String], 'path.as[String], 'pathType.as[String] ? "hdfs", 'overwrite.as[Boolean] ? false) {
+        (name, path, pathType, overwrite) =>
+          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+            validateCondition(path != null && !path.trim.isEmpty, Configuration.FILE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+              validateCondition("hdfs".equals(pathType) || "tachyon".equals(pathType),
+                    Configuration.FILE_PATH_TYPE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                validateCondition(name != null && !name.trim.isEmpty, Configuration.TABLE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                  validateCondition(overwrite || !dals.parquetTableDal.tableExists(name, userId),
+                          Configuration.TABLE_ALREADY_EXISTS_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                    respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
+                      Configuration.log4j.info(s"Registering table $name having the path $path on node $pathType")
 
-                    val future = ask(balancerActor, RegisterTableMessage(name, path, getNamenodeFromPathType(pathType)))
-                      .map(innerFuture => innerFuture.asInstanceOf[Future[Any]])
-                      .flatMap(identity)
-                    future.map {
-                      case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-                      case result: String => ctx.complete(StatusCodes.OK, result)
+                      val future = ask(balancerActor, RegisterTableMessage(name, path, getNamenodeFromPathType(pathType), userId))
+                        .map(innerFuture => innerFuture.asInstanceOf[Future[Any]])
+                        .flatMap(identity)
+                      future.map {
+                        case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                        case result: String => ctx.complete(StatusCodes.OK, result)
+                      }
                     }
                   }
                 }
               }
             }
           }
-        }
+      }
     }
   }
 
@@ -230,24 +235,26 @@ trait ParquetApi extends BaseApi with CORSDirectives {
    * It returns a list of tables information (this information is stored in [[com.xpatterns.jaws.data.DTO.Tables]])
    */
   private def parquetTableGetRoute = get {
-    parameterSeq { params =>
-      corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+    securityFilter { userId =>
+      parameterSeq { params =>
+        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
 
-        respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-          var tables = ArrayBuffer[String]()
-          var describe = false
+          respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+            var tables = ArrayBuffer[String]()
+            var describe = false
 
-          params.foreach {
-            case ("describe", value)                    => describe = Try(value.toBoolean).getOrElse(false)
-            case ("table", value) if value.nonEmpty => tables += value
-            case (key, value)                           => Configuration.log4j.warn(s"Unknown parameter $key!")
-          }
-          Configuration.log4j.info(s"Retrieving table information for parquet tables= $tables")
-          val future = ask(getParquetTablesActor, new GetParquetTablesMessage(tables.toArray, describe))
+            params.foreach {
+              case ("describe", value) => describe = Try(value.toBoolean).getOrElse(false)
+              case ("table", value) if value.nonEmpty => tables += value
+              case (key, value) => Configuration.log4j.warn(s"Unknown parameter $key!")
+            }
+            Configuration.log4j.info(s"Retrieving table information for parquet tables= $tables")
+            val future = ask(getParquetTablesActor, new GetParquetTablesMessage(tables.toArray, describe, userId))
 
-          future.map {
-            case e: ErrorMessage       => ctx.complete(StatusCodes.InternalServerError, e.message)
-            case result: Array[Tables] => ctx.complete(StatusCodes.OK, result)
+            future.map {
+              case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+              case result: Array[Tables] => ctx.complete(StatusCodes.OK, result)
+            }
           }
         }
       }
@@ -264,18 +271,20 @@ trait ParquetApi extends BaseApi with CORSDirectives {
    * </ul>
    */
   private def parquetTableDeleteRoute = delete {
-    path(Segment) { name =>
-      corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-        {
-          validateCondition(name != null && !name.trim.isEmpty, Configuration.TABLE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-            respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
-              Configuration.log4j.info(s"Unregistering table $name ")
-              val future = ask(balancerActor, UnregisterTableMessage(name))
-                .map(innerFuture => innerFuture.asInstanceOf[Future[Any]])
-                .flatMap(identity)
-              future.map {
-                case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-                case result: String  => ctx.complete(StatusCodes.OK, result)
+    securityFilter { userId =>
+      path(Segment) { name =>
+        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+          {
+            validateCondition(name != null && !name.trim.isEmpty, Configuration.TABLE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+              respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
+                Configuration.log4j.info(s"Unregistering table $name ")
+                val future = ask(balancerActor, UnregisterTableMessage(name, userId))
+                  .map(innerFuture => innerFuture.asInstanceOf[Future[Any]])
+                  .flatMap(identity)
+                future.map {
+                  case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                  case result: String => ctx.complete(StatusCodes.OK, result)
+                }
               }
             }
           }

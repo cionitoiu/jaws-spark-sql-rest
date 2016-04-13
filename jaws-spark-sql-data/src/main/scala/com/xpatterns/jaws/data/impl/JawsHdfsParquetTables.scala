@@ -16,21 +16,21 @@ class JawsHdfsParquetTables(configuration: Configuration) extends TJawsParquetTa
   val forcedMode = configuration.getBoolean(Utils.FORCED_MODE, false)
   Utils.createFolderIfDoesntExist(configuration, configuration.get(Utils.PARQUET_TABLES_FOLDER), forcedMode)
 
-  override def addParquetTable(pTable: ParquetTable) {
-    logger.debug(s"Writing parquet table ${pTable.name} with path ${pTable.filePath} ")
+  override def addParquetTable(pTable: ParquetTable, userId: String) {
+    logger.debug(s"Writing parquet table ${pTable.name} with path ${pTable.filePath} for user $userId")
     val valueTouple = (pTable.namenode, pTable.filePath).toJson.prettyPrint
     Utils.rewriteFile(valueTouple, configuration, getParquetTableFilePath(pTable.name))
   }
 
-  override def deleteParquetTable(name: String) {
-    logger.debug(s"Deleting parquet table called $name")
+  override def deleteParquetTable(name: String, userId: String) {
+    logger.debug(s"Deleting parquet table called $name for user $userId")
     val filePath = getParquetTableFilePath(name)
     Utils.deleteFile(configuration, filePath)
   }
 
-  override def listParquetTables(): Array[ParquetTable] = {
+  override def listParquetTables(userId: String): Array[ParquetTable] = {
 
-    logger.debug("Listing parquet tables: ")
+    logger.debug("Listing parquet tables for user " + userId)
     var tables = Array[ParquetTable]()
 
     val files = Utils.listFiles(configuration, Utils.PARQUET_TABLES_FOLDER, new Comparator[String]() {
@@ -45,31 +45,31 @@ class JawsHdfsParquetTables(configuration: Configuration) extends TJawsParquetTa
 
     while (iterator.hasNext) {
       val tableName = iterator.next()
-      
+
       val (namenode, filepath) = Utils.readFile(configuration, Utils.PARQUET_TABLES_FOLDER + "/" +
-                                    tableName).parseJson.convertTo[(String, String)]
-      tables = tables :+ new ParquetTable(tableName, filepath, namenode) 
+        tableName).parseJson.convertTo[(String, String)]
+      tables = tables :+ new ParquetTable(tableName, filepath, namenode)
     }
-    
+
     tables
   }
 
-  override def tableExists(name: String): Boolean = {
-    logger.debug(s"Checking table existence for $name")
+  override def tableExists(name: String, userId: String): Boolean = {
+    logger.debug(s"Checking table existence for $name and user $userId")
     val filename = getParquetTableFilePath(name)
 
     Utils.checkFileExistence(filename, configuration)
   }
 
-  override def readParquetTable(name: String): ParquetTable = {
-    logger.debug(s"Reading table $name")
+  override def readParquetTable(name: String, userId: String): ParquetTable = {
+    logger.debug(s"Reading table $name for user $userId")
     val filename = getParquetTableFilePath(name)
 
     if (Utils.checkFileExistence(filename, configuration)){
       val (namenode, filepath) = Utils.readFile(configuration, filename).parseJson.convertTo[(String, String)]
       new ParquetTable(name, filepath, namenode)
     }
-      
+
     else new ParquetTable
 
   }

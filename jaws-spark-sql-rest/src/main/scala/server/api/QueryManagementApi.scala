@@ -191,19 +191,21 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
    */
   private def resultsRoute = path("results") {
     get {
-      parameters('queryID, 'offset.as[Int], 'limit.as[Int], 'format ? "default") { (queryID, offset, limit, format) =>
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-          validateCondition(queryID != null && !queryID.trim.isEmpty, Configuration.UUID_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-            respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+      securityFilter { userId =>
+        parameters('queryID, 'offset.as[Int], 'limit.as[Int], 'format ? "default") { (queryID, offset, limit, format) =>
+          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+            validateCondition(queryID != null && !queryID.trim.isEmpty, Configuration.UUID_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+              respondWithMediaType(MediaTypes.`application/json`) { ctx =>
 
-              implicit def customResultMarshaller[T] = Marshaller.delegate[T, String](ContentTypes.`application/json`) {
-                value ⇒ customGson.toJson(value)
-              }
+                implicit def customResultMarshaller[T] = Marshaller.delegate[T, String](ContentTypes.`application/json`) {
+                  value ⇒ customGson.toJson(value)
+                }
 
-              val future = ask(getResultsActor, GetResultsMessage(queryID, offset, limit, format.toLowerCase))
-              future.map {
-                case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-                case result: Any     => ctx.complete(StatusCodes.OK, result)
+                val future = ask(getResultsActor, GetResultsMessage(queryID, offset, limit, format.toLowerCase, userId))
+                future.map {
+                  case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                  case result: Any => ctx.complete(StatusCodes.OK, result)
+                }
               }
             }
           }

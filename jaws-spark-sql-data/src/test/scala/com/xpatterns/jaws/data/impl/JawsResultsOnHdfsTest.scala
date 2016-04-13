@@ -10,8 +10,8 @@ import com.xpatterns.jaws.data.DTO.AvroResult
 import com.xpatterns.jaws.data.DTO.CustomResult
 
 /**
- * Created by emaorhian on 7/28/14.
- */
+  * Created by emaorhian on 7/28/14.
+  */
 @RunWith(classOf[JUnitRunner])
 class JawsResultsOnHdfsTest extends FunSuite with BeforeAndAfter {
 
@@ -66,10 +66,10 @@ class JawsResultsOnHdfsTest extends FunSuite with BeforeAndAfter {
   test("testWriteReadResults") {
     val uuid = Randomizer.getRandomString(10)
     val resultsConverter = Randomizer.getResultsConverter
-    resultsDal.setResults(uuid, resultsConverter)
+    resultsDal.setResults(uuid, resultsConverter, "userTest")
 
-    val avroResults = resultsDal.getAvroResults(uuid)
-    val customResults = resultsDal.getCustomResults(uuid)
+    val avroResults = resultsDal.getAvroResults(uuid, "userTest")
+    val customResults = resultsDal.getCustomResults(uuid, "userTest")
 
     assert(resultsConverter.toAvroResults() === avroResults)
     assert(resultsConverter.toCustomResults === customResults)
@@ -79,15 +79,15 @@ class JawsResultsOnHdfsTest extends FunSuite with BeforeAndAfter {
   test("testDeleteResults") {
     val uuid = Randomizer.getRandomString(10)
     val resultsConverter = Randomizer.getResultsConverter
-    resultsDal.setResults(uuid, resultsConverter)
+    resultsDal.setResults(uuid, resultsConverter, "userTest")
 
-    val avroResults = resultsDal.getAvroResults(uuid)
-    val customResults = resultsDal.getCustomResults(uuid)
+    val avroResults = resultsDal.getAvroResults(uuid, "userTest")
+    val customResults = resultsDal.getCustomResults(uuid, "userTest")
 
-    resultsDal.deleteResults(uuid)
+    resultsDal.deleteResults(uuid, "userTest")
 
-    val avroResultsDeleted = resultsDal.getAvroResults(uuid)
-    val customResultsDeleted = resultsDal.getCustomResults(uuid)
+    val avroResultsDeleted = resultsDal.getAvroResults(uuid, "userTest")
+    val customResultsDeleted = resultsDal.getCustomResults(uuid, "userTest")
 
     assert(resultsConverter.toAvroResults() === avroResults)
     assert(resultsConverter.toCustomResults === customResults)

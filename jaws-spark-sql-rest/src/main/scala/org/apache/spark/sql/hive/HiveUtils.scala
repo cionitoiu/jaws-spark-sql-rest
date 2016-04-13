@@ -306,13 +306,14 @@ object HiveUtils {
                            tableName: String,
                            parquetNamenode: String,
                            tablePath: String,
-                           dals: DAL) {
+                           dals: DAL,
+                           userId: String) {
     Configuration.log4j.info(s"[HiveUtils] registering table $tableName")
     val parquetFile = hiveContext.readXPatternsParquet(parquetNamenode, tablePath)
 
     // register table
     parquetFile.registerTempTable(tableName)
-    dals.parquetTableDal.addParquetTable(new ParquetTable(tableName, tablePath, parquetNamenode))
+    dals.parquetTableDal.addParquetTable(new ParquetTable(tableName, tablePath, parquetNamenode), userId)
   }
 
   /**

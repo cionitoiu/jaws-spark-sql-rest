@@ -25,7 +25,7 @@ class DeleteQueryApiActor(dals: DAL) extends Actor {
           case QueryState.NOT_FOUND => throw new Exception(s"The query ${message.queryID} was not found. Please provide a valid query id")
           case _ =>
             dals.loggingDal.deleteQuery(message.queryID, message.userId)
-            dals.resultsDal.deleteResults(message.queryID)
+            dals.resultsDal.deleteResults(message.queryID, message.userId)
             s"Query ${message.queryID} was deleted"
         }
       }

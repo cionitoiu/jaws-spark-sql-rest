@@ -57,7 +57,7 @@ class HiveRunnerActor(dals: DAL) extends Actor {
       runResponse onComplete {
         case Success(s) =>
           val mes = s"[HiveRunnerActor]: Query $uuid has successfully finished"
-          dals.resultsDal.setResults(uuid, s)
+          dals.resultsDal.setResults(uuid, s, message.userId)
           setStatus(uuid, mes, QueryState.DONE, message.userId)
           val executionTime = System.currentTimeMillis - startTime
           dals.loggingDal.setExecutionTime(uuid, executionTime, message.userId)
