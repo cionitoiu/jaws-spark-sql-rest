@@ -1,5 +1,7 @@
 package org.apache.spark.scheduler
 
+import java.util.concurrent.TimeUnit
+
 import com.xpatterns.jaws.data.contracts.DAL
 import org.apache.hadoop.conf.{ Configuration => HadoopConfiguration }
 import com.xpatterns.jaws.data.utils.Utils._
@@ -25,19 +27,21 @@ import org.apache.spark.sql.hive.HiveUtils
  * Created by emaorhian
  */
 class RunScriptTask(dals: DAL, hiveContext: HiveContextWrapper,
-                    uuid: String, hdfsConf: HadoopConfiguration, runMessage: RunScriptMessage, @volatile var isCanceled: Boolean = false) extends Runnable {
+                    uuid: String, hdfsConf: HadoopConfiguration, runMessage: RunScriptMessage,
+                    @volatile var isCanceled: Boolean = false) extends Runnable {
 
   override def run() {
     try {
       // parse the hql into independent commands
       val commands = HiveUtils.parseHql(runMessage.script)
      
-      HiveUtils.logInfoMessage(uuid, s"There are ${commands.length} commands that need to be executed", "sparksql", dals.loggingDal)
+      HiveUtils.logInfoMessage(uuid, s"There are ${commands.length} commands that need to be executed", "sparksql",
+                               dals.loggingDal,runMessage.userId)
 
       val startTime = System.currentTimeMillis()
 
       // Set the start time for the query
-      dals.loggingDal.setTimestamp(uuid, startTime)
+      dals.loggingDal.setTimestamp(uuid, startTime, runMessage.userId)
 
       // job group id used to identify these jobs when trying to cancel them.
       hiveContext.sparkContext.setJobGroup(uuid, "")
@@ -47,19 +51,18 @@ class RunScriptTask(dals: DAL, hiveContext: HiveContextWrapper,
       val executionTime = System.currentTimeMillis() - startTime
       val formattedDuration = DurationFormatUtils.formatDurationHMS(executionTime)
 
-      HiveUtils.logInfoMessage(uuid, s"The total execution time was: $formattedDuration!", "sparksql", dals.loggingDal)
-      writeResults(result, executionTime)
+      HiveUtils.logInfoMessage(uuid, s"The total execution time was: $formattedDuration!", "sparksql",
+                               dals.loggingDal, runMessage.userId)
+      writeResults(result, executionTime, runMessage.userId)
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         val message = getCompleteStackTrace(e)
         Configuration.log4j.error(message)
-        HiveUtils.logMessage(uuid, message, "sparksql", dals.loggingDal)
-        dals.loggingDal.setState(uuid, QueryState.FAILED)
-        dals.loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(0, runMessage.maxNumberOfResults, 0, runMessage.limited))
-
+        HiveUtils.logMessage(uuid, message, "sparksql", dals.loggingDal,runMessage.userId)
+        dals.loggingDal.setState(uuid, QueryState.FAILED, runMessage.userId)
+        dals.loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(0, runMessage.maxNumberOfResults, 0, runMessage.limited),
+                                       runMessage.userId)
         throw new RuntimeException(e)
-
-      }
     }
   }
 
@@ -72,14 +75,25 @@ class RunScriptTask(dals: DAL, hiveContext: HiveContextWrapper,
       val isLastCmd = if (commandIndex == nrOfCommands) true else false
       isCanceled match {
         case false =>
-          result = HiveUtils.runCmdRdd(cmd, hiveContext, Configuration.numberOfResults.getOrElse("100").toInt,
-            uuid, runMessage.limited, runMessage.maxNumberOfResults, isLastCmd, Configuration.rddDestinationIp.get, dals.loggingDal, hdfsConf, runMessage.rddDestination)
-          HiveUtils.logInfoMessage(uuid, s"Command progress : There were executed $commandIndex commands out of $nrOfCommands", "sparksql", dals.loggingDal)
+          result = HiveUtils.runCmdRdd(cmd,
+                                       hiveContext,
+                                       Configuration.numberOfResults.getOrElse("100").toInt,
+                                       uuid,
+                                       runMessage.limited,
+                                       runMessage.maxNumberOfResults,
+                                       isLastCmd,
+                                       Configuration.rddDestinationIp.get,
+                                       dals.loggingDal,
+                                       hdfsConf,
+                                       runMessage.rddDestination,
+                                       runMessage.userId)
+          HiveUtils.logInfoMessage(uuid, s"Command progress : There were executed $commandIndex commands out " +
+                                         s"of $nrOfCommands", "sparksql", dals.loggingDal, runMessage.userId)
 
         case _ =>
           val message = s"The command $cmd was canceled!"
           Configuration.log4j.warn(message)
-          HiveUtils.logMessage(uuid, message, "sparksql", dals.loggingDal)
+          HiveUtils.logMessage(uuid, message, "sparksql", dals.loggingDal, runMessage.userId)
 
       }
     }
@@ -87,23 +101,21 @@ class RunScriptTask(dals: DAL, hiveContext: HiveContextWrapper,
     result
   }
 
-  def writeResults(result: ResultsConverter, executionTime:Long) {
+  private def writeResults(result: ResultsConverter, executionTime:Long, userId: String) {
     isCanceled match {
-      case false => {
+      case false =>
         Option(result) match {
           case None => Configuration.log4j.debug("[RunScriptTask] result is null")
           case _    => dals.resultsDal.setResults(uuid, result)
         }
-        dals.loggingDal.setState(uuid, QueryState.DONE)
-        dals.loggingDal.setExecutionTime(uuid, executionTime)
-      }
-      case _ => {
+        dals.loggingDal.setState(uuid, QueryState.DONE, userId)
+        dals.loggingDal.setExecutionTime(uuid, executionTime, userId)
+      case _ =>
         val message = s"The query failed because it was canceled!"
         Configuration.log4j.warn(message)
-        HiveUtils.logMessage(uuid, message, "sparksql", dals.loggingDal)
-        dals.loggingDal.setState(uuid, QueryState.FAILED)
-        dals.loggingDal.setExecutionTime(uuid, executionTime)
-      }
+        HiveUtils.logMessage(uuid, message, "sparksql", dals.loggingDal, userId)
+        dals.loggingDal.setState(uuid, QueryState.FAILED, userId)
+        dals.loggingDal.setExecutionTime(uuid, executionTime, userId)
     }
   }
 
@@ -114,29 +126,30 @@ class RunScriptTask(dals: DAL, hiveContext: HiveContextWrapper,
 }
 
 class RunParquetScriptTask(dals: DAL, hiveContext: HiveContextWrapper,
-                           uuid: String, hdfsConf: HadoopConfiguration, runMessage: RunParquetMessage, isCanceled: Boolean = false)
-  extends RunScriptTask(dals, hiveContext, uuid, hdfsConf, new RunScriptMessage(runMessage.script, runMessage.limited, runMessage.maxNumberOfResults, runMessage.rddDestination), isCanceled) {
+                           uuid: String, hdfsConf: HadoopConfiguration,
+                           runMessage: RunParquetMessage, isCanceled: Boolean = false)
+  extends RunScriptTask(dals, hiveContext, uuid, hdfsConf,
+                        new RunScriptMessage(runMessage.script, runMessage.limited, runMessage.maxNumberOfResults,
+                                             runMessage.rddDestination, runMessage.userId), isCanceled) {
   override def run() {
-    implicit val timeout = Timeout(Configuration.timeout.toInt)
-    val future = ask(JawsController.balancerActor, RegisterTableMessage(runMessage.table, runMessage.tablePath, runMessage.namenode))
+    implicit val timeout = Timeout(Configuration.timeout, TimeUnit.MILLISECONDS)
+    val future = ask(JawsController.balancerActor,
+                     RegisterTableMessage(runMessage.table, runMessage.tablePath, runMessage.namenode))
       .map(innerFuture => innerFuture.asInstanceOf[Future[Any]])
       .flatMap(identity)
 
     future onComplete {
       case Success(x) => x match {
-        case e: ErrorMessage => {
-          HiveUtils.logMessage(uuid, e.message, "sparksql", dals.loggingDal)
-          dals.loggingDal.setState(uuid, QueryState.FAILED)
-        }
-        case result: String => {
+        case e: ErrorMessage =>
+          HiveUtils.logMessage(uuid, e.message, "sparksql", dals.loggingDal, runMessage.userId)
+          dals.loggingDal.setState(uuid, QueryState.FAILED, runMessage.userId)
+        case result: String =>
           Configuration.log4j.info(result)
-          super.run
-        }
+          super.run()
       }
-      case Failure(ex) => {
-        HiveUtils.logMessage(uuid, getCompleteStackTrace(ex), "sparksql", dals.loggingDal)
-        dals.loggingDal.setState(uuid, QueryState.FAILED)
-      }
+      case Failure(ex) =>
+        HiveUtils.logMessage(uuid, getCompleteStackTrace(ex), "sparksql", dals.loggingDal, runMessage.userId)
+        dals.loggingDal.setState(uuid, QueryState.FAILED, runMessage.userId)
     }
     super.run()
   }

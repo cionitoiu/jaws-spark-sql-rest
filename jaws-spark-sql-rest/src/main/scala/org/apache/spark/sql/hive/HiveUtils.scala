@@ -29,7 +29,7 @@ object HiveUtils {
     var command: String = ""
     Option(hql) match {
       case None => Configuration.log4j.info("[HiveUtils] hql is null")
-      case _ => {
+      case _ =>
         hql.split(";").foreach(oneCmd => {
           val trimmedCmd = oneCmd.trim()
           if (trimmedCmd.endsWith("\\")) {
@@ -45,7 +45,6 @@ object HiveUtils {
           command = ""
 
         })
-      }
     }
 
     result
@@ -61,7 +60,8 @@ object HiveUtils {
                 hdfsNamenode: String,
                 loggingDal: TJawsLogging,
                 conf: HadoopConfiguration,
-                rddDestination: String): ResultsConverter = {
+                rddDestination: String,
+                userId: String): ResultsConverter = {
 
     Configuration.log4j.info("[HiveUtils]: execute the following command:" + cmd)
 
@@ -71,57 +71,53 @@ object HiveUtils {
     val (firstToken, secondToken) = if (tokens.size >= 2) (tokens(0).trim.toLowerCase(), tokens(1).trim.toLowerCase()) else (tokens(0).trim.toLowerCase(), "")
 
     (firstToken, secondToken) match {
-      case ("select", _) => {
-
+      case ("select", _) =>
         Configuration.log4j.info("[HiveUtils]: the command is a select")
-        Configuration.log4j.info("[HiveUtils]: the default number of results is: " + defaultNumberOfResults + " while the maximum number of results is " + maxNumberOfResults)
-        executeSelect(cmd_trimmed, uuid, isLimited, maxNumberOfResults, isLastCommand, defaultNumberOfResults, hiveContext, loggingDal, hdfsNamenode, rddDestination, conf)
-      }
-      case ("set", _) => {
+        Configuration.log4j.info("[HiveUtils]: the default number of results is: " + defaultNumberOfResults +
+                                 " while the maximum number of results is " + maxNumberOfResults)
+        executeSelect(cmd_trimmed, uuid, isLimited, maxNumberOfResults, isLastCommand, defaultNumberOfResults,
+                      hiveContext, loggingDal, hdfsNamenode, rddDestination, conf, userId)
+      case ("set", _) =>
         // we won't put an uuid because it fails otherwise
         Configuration.log4j.info("[HiveUtils]: the command is a set")
-        loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(0, maxNumberOfResults, 0, isLimited))
+        loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(0, maxNumberOfResults, 0, isLimited), userId)
         null
-      }
 
-      case ("add", "jar") if tokens.length >= 3 => {
+
+      case ("add", "jar") if tokens.length >= 3 =>
         Configuration.log4j.info("[HiveUtils]: the command is a add jar")
         val jarPath = tokens(2).trim
         Configuration.log4j.info("[HiveUtils]: the jar to be added is" + jarPath)
         val resultSet = hiveContext.getSparkContext().addJar(jarPath)
 
-        loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(0, maxNumberOfResults, 0, isLimited))
+        loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(0, maxNumberOfResults, 0, isLimited), userId)
         null
-      }
-      case ("add", "file") if tokens.length >= 3 => {
+      case ("add", "file") if tokens.length >= 3 =>
         Configuration.log4j.info("[HiveUtils]: the command is a add file")
         val filePath = tokens(2).trim
         Configuration.log4j.info("[HiveUtils]: the file to be added is" + filePath)
         val resultSet = hiveContext.getSparkContext().addFile(filePath)
-
-        loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(0, maxNumberOfResults, 0, isLimited))
+        loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(0, maxNumberOfResults, 0, isLimited), userId)
         null
-      }
 
-      case ("drop", _) | ("show", _) | ("describe", _) => {
+      case ("drop", _) | ("show", _) | ("describe", _) =>
         Configuration.log4j.info("[HiveUtils]: the command is a metadata query : " + tokens(0))
         val metadataResults = runMetadataCmd(hiveContext, cmd_trimmed)
         val rows = metadataResults map (arr => Row.fromSeq(arr))
         val result = new ResultsConverter(new StructType(Array(new StructField("result", StringType, true))), rows)
-        loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(result.result.length, maxNumberOfResults, 0, isLimited))
+        loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(result.result.length, maxNumberOfResults, 0, isLimited), userId)
         result
-      }
 
-      case _ => {
+
+      case _ =>
         Configuration.log4j.info("[HiveUtils]: the command is a different command")
-        run(hiveContext, cmd_trimmed, maxNumberOfResults, isLimited, loggingDal, uuid)
-      }
+        run(hiveContext, cmd_trimmed, maxNumberOfResults, isLimited, loggingDal, uuid, userId)
 
     }
 
   }
 
-  def executeSelect(cmd: String,
+  private def executeSelect(cmd: String,
                     uuid: String,
                     isLimited: Boolean,
                     maxNumberOfResults: Long,
@@ -131,28 +127,30 @@ object HiveUtils {
                     loggingDal: TJawsLogging,
                     hdfsNamenode: String,
                     rddDestination: String,
-                    conf: HadoopConfiguration): ResultsConverter = {
+                    conf: HadoopConfiguration,
+                    userId: String): ResultsConverter = {
 
     if (isLimited && maxNumberOfResults <= defaultNumberOfResults) {
       // ***** limited and few results -> cassandra
       val limitedCommand = limitQuery(maxNumberOfResults, cmd)
-      run(hiveContext, limitedCommand, maxNumberOfResults, isLimited, loggingDal, uuid)
+      run(hiveContext, limitedCommand, maxNumberOfResults, isLimited, loggingDal, uuid, userId)
     } else if (isLimited && isLastCommand) {
       // ***** limited, lots of results and last command -> hdfs
       val limitedCommand = limitQuery(maxNumberOfResults, cmd)
-      runRdd(hiveContext, uuid, limitedCommand, hdfsNamenode, maxNumberOfResults, isLimited, loggingDal, conf, rddDestination)
+      runRdd(hiveContext, uuid, limitedCommand, hdfsNamenode, maxNumberOfResults, isLimited,
+             loggingDal, conf, rddDestination, userId)
     } else if (isLimited) {
       // ***** limited, lots of results and not last command -> default
       // number and cassandra
       val limitedCommand = limitQuery(defaultNumberOfResults, cmd)
-      run(hiveContext, limitedCommand, maxNumberOfResults, isLimited, loggingDal, uuid)
+      run(hiveContext, limitedCommand, maxNumberOfResults, isLimited, loggingDal, uuid, userId)
     } else if (isLastCommand) {
       // ***** not limited and last command -> hdfs and not a limit
-      runRdd(hiveContext, uuid, cmd, hdfsNamenode, maxNumberOfResults, isLimited, loggingDal, conf, rddDestination)
+      runRdd(hiveContext, uuid, cmd, hdfsNamenode, maxNumberOfResults, isLimited, loggingDal, conf, rddDestination, userId)
     } else {
       // ***** not limited and not last command -> cassandra and default
       val limitedCommand = limitQuery(defaultNumberOfResults, cmd)
-      run(hiveContext, limitedCommand, maxNumberOfResults, isLimited, loggingDal, uuid)
+      run(hiveContext, limitedCommand, maxNumberOfResults, isLimited, loggingDal, uuid, userId)
     }
   }
 
@@ -165,7 +163,7 @@ object HiveUtils {
     result map (row => row map (_ trim ()))
   }
 
-  def runRdd(hiveContext: HiveContext,
+  private def runRdd(hiveContext: HiveContext,
              uuid: String,
              cmd: String,
              destinationIp: String,
@@ -173,7 +171,8 @@ object HiveUtils {
              isLimited: Boolean,
              loggingDal: TJawsLogging,
              conf: HadoopConfiguration,
-             userDefinedDestination: String): ResultsConverter = {
+             userDefinedDestination: String,
+             userId: String): ResultsConverter = {
 
     // we need to run sqlToRdd. Needed for pagination
     Configuration.log4j.info("[HiveUtils]: we will execute sqlToRdd command")
@@ -194,13 +193,13 @@ object HiveUtils {
     var destination = getHdfsPath(destinationIp)
 
     userDefinedDestination.toLowerCase match {
-      case "hdfs" => loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(nbOfResults, maxNumberOfResults, 1, isLimited))
+      case "hdfs" => loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(nbOfResults, maxNumberOfResults, 1, isLimited), userId)
 
       case "tachyon" =>
-        loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(nbOfResults, maxNumberOfResults, 2, isLimited))
+        loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(nbOfResults, maxNumberOfResults, 2, isLimited), userId)
         destination = getTachyonPath(destinationIp)
 
-      case _ => loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(nbOfResults, maxNumberOfResults, 1, isLimited))
+      case _ => loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(nbOfResults, maxNumberOfResults, 1, isLimited), userId)
     }
 
     // save rdd on hdfs
@@ -233,17 +232,18 @@ object HiveUtils {
     s"${finalDestination}user/${System.getProperty("user.name")}/${Configuration.resultsFolder.getOrElse("jawsResultsFolder")}/$uuid"
   }
 
-  def run(hiveContext: HiveContext,
+  private def run(hiveContext: HiveContext,
           cmd: String,
           maxNumberOfResults: Long,
           isLimited: Boolean,
           loggingDal: TJawsLogging,
-          uuid: String): ResultsConverter = {
+          uuid: String,
+          userId: String): ResultsConverter = {
     Configuration.log4j.info("[HiveUtils]: the final command is " + cmd)
     val resultRdd = hiveContext.sql(cmd)
     val result = resultRdd.collect
     val schema = resultRdd.schema
-    loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(result.length, maxNumberOfResults, 0, isLimited))
+    loggingDal.setRunMetaInfo(uuid, new QueryMetaInfo(result.length, maxNumberOfResults, 0, isLimited), userId)
     new ResultsConverter(schema, result)
   }
 
@@ -271,13 +271,13 @@ object HiveUtils {
     "tachyon://" + ip.trim() + ":19998"
   }
 
-  def logInfoMessage(uuid: String, message: String, jobId: String, loggingDal: TJawsLogging) {
+  def logInfoMessage(uuid: String, message: String, jobId: String, loggingDal: TJawsLogging, userId: String) {
     Configuration.log4j.info(message)
-    logMessage(uuid, message, jobId, loggingDal)
+    logMessage(uuid, message, jobId, loggingDal, userId)
   }
 
-  def logMessage(uuid: String, message: String, jobId: String, loggingDal: TJawsLogging) {
-    loggingDal.addLog(uuid, jobId, System.currentTimeMillis(), message)
+  def logMessage(uuid: String, message: String, jobId: String, loggingDal: TJawsLogging, userId: String) {
+    loggingDal.addLog(uuid, jobId, System.currentTimeMillis(), message, userId)
     MainActors.logsActor ! new PushLogs(uuid, message)
   }
 

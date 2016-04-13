@@ -8,18 +8,19 @@ import ExecutionContext.Implicits.global
 import scala.util.{ Success, Failure }
 import messages._
 /**
- * Created by emaorhian
- */
+  * Created by emaorhian
+  */
 class GetQueriesApiActor(dals: DAL) extends Actor {
 
   override def receive = {
 
     case message: GetPaginatedQueriesMessage =>
 
-      Configuration.log4j.info("[GetQueriesApiActor]: retrieving " + message.limit + " number of queries starting with " + message.startQueryID)
+      Configuration.log4j.info("[GetQueriesApiActor]: retrieving " + message.limit +
+        " number of queries starting with " + message.startQueryID + " for user" + message.userId)
       val currentSender = sender()
       val getQueriesFuture = future {
-        dals.loggingDal.getQueries(message.startQueryID, message.limit)
+        dals.loggingDal.getQueries(message.startQueryID, message.limit, message.userId)
       }
 
       getQueriesFuture onComplete {
@@ -33,7 +34,7 @@ class GetQueriesApiActor(dals: DAL) extends Actor {
       val currentSender = sender()
 
       val getQueryInfoFuture = future {
-        dals.loggingDal.getQueries(message.queryIDs)
+        dals.loggingDal.getQueries(message.queryIDs, message.userId)
       }
 
       getQueryInfoFuture onComplete {
@@ -47,7 +48,7 @@ class GetQueriesApiActor(dals: DAL) extends Actor {
       val currentSender = sender()
 
       val getQueryInfoFuture = future {
-        dals.loggingDal.getQueriesByName(message.name)
+        dals.loggingDal.getQueriesByName(message.name, message.userId)
       }
 
       getQueryInfoFuture onComplete {
@@ -55,13 +56,13 @@ class GetQueriesApiActor(dals: DAL) extends Actor {
         case Failure(e) => currentSender ! ErrorMessage(s"GET query info failed with the following message: ${e.getMessage}")
       }
 
-    case _: GetPublishedQueries =>
+    case message: GetPublishedQueries =>
       Configuration.log4j.info("[GetQueryInfoApiActor]: retrieving the published queries ")
 
       val currentSender = sender()
 
       val getQueryInfoFuture = future {
-        dals.loggingDal.getPublishedQueries()
+        dals.loggingDal.getPublishedQueries(message.userId)
       }
 
       getQueryInfoFuture onComplete {

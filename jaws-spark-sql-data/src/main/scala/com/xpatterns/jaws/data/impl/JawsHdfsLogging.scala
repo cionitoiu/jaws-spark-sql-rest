@@ -31,24 +31,22 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
   Utils.createFolderIfDoesntExist(configuration, configuration.get(Utils.QUERY_PUBLISHED_FOLDER), forcedMode)
   Utils.createFolderIfDoesntExist(configuration, configuration.get(Utils.QUERY_UNPUBLISHED_FOLDER), forcedMode)
 
-  override def setState(uuid: String, queryState: QueryState.QueryState) {
-    logger.debug("Writing query state " + queryState.toString + " to query " + uuid)
+  override def setState(uuid: String, queryState: QueryState.QueryState, userId: String) {
+    logger.debug("Writing query state " + queryState.toString + " to query " + uuid + " for user " + userId)
     Utils.rewriteFile(queryState.toString, configuration, getQueryStateFilePath(uuid))
 
   }
 
-  override def setScriptDetails(queryId: String, scriptDetails: String) {
+  override def setScriptDetails(queryId: String, scriptDetails: String, userId: String) {
 
-    logger.debug("Writing script details " + scriptDetails + " to query " + queryId)
+    logger.debug("Writing script details " + scriptDetails + " to query " + queryId + " for user " + userId)
     Utils.rewriteFile(scriptDetails, configuration, getQueryDetailsFilePath(queryId))
 
   }
 
-  override def addLog(queryId: String, jobId: String, time: Long, log: String) {
+  override def addLog(queryId: String, jobId: String, time: Long, log: String, userId: String) {
 
-    logger.debug("Writing log " + log + " to query " + queryId + " at time " + time)
-
-    logger.debug("Writing log " + log + " to query " + queryId + " at time " + time)
+    logger.debug("Writing log " + log + " to query " + queryId + " at time " + time + " for user " + userId)
     val folderName = getQueryLogsFolderPath(queryId)
     val fileName = folderName + "/" + time.toString
     val logMessage = jobId + QUERYID_SEPARATOR + log
@@ -57,9 +55,9 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
 
   }
 
-  override def getState(queryId: String): QueryState.QueryState = {
+  override def getState(queryId: String, userId: String): QueryState.QueryState = {
 
-    logger.debug("Reading query state for query: " + queryId)
+    logger.debug("Reading query state for query: " + queryId + " for user " + userId)
     val filename = getQueryStateFilePath(queryId)
 
     if (Utils.checkFileExistence(filename, configuration)) {
@@ -69,17 +67,17 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
     QueryState.NOT_FOUND
   }
 
-  override def getScriptDetails(queryId: String): String = {
-    logger.info("Reading script details for query: " + queryId)
+  override def getScriptDetails(queryId: String, userId: String): String = {
+    logger.info("Reading script details for query " + queryId + " and user " + userId)
     val filename = getQueryDetailsFilePath(queryId)
     if (Utils.checkFileExistence(filename, configuration)) Utils.readFile(configuration, filename) else ""
   }
 
-  override def getLogs(queryId: String, time: Long, limit: Int): Logs = {
+  override def getLogs(queryId: String, time: Long, limit: Int, userId: String): Logs = {
 
-    logger.debug("Reading logs for query: " + queryId + " from date: " + time)
+    logger.debug("Reading logs for query: " + queryId + " from date: " + time + " for user " + userId)
 
-    val state = getState(queryId).toString
+    val state = getState(queryId, userId).toString
     val folderName = getQueryLogsFolderPath(queryId)
     var logs = Array[Log]()
     if (Utils.checkFileExistence(folderName, configuration)) {
@@ -120,9 +118,9 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
     filesToBeRead
   }
 
-  override def getQueries(queryId: String, limit: Int): Queries = {
+  override def getQueries(queryId: String, limit: Int, userId: String): Queries = {
     val queryIdValue = Option(queryId).getOrElse("")
-    logger.info("Reading states for queries starting with the query: " + queryIdValue)
+    logger.info("Reading states for queries starting with the query: " + queryIdValue + " for user " + userId)
     var stateList = Array[Query]()
 
     val folderName = configuration.get(Utils.STATUS_FOLDER)
@@ -140,20 +138,20 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
     filesToBeRead.foreach(file => {
       val currentUuid = Utils.getNameFromPath(file)
       stateList = stateList ++ Array(new Query(Utils.readFile(configuration, folderName + "/" + file), currentUuid,
-        getScriptDetails(currentUuid), getMetaInfo(queryId)))
+        getScriptDetails(currentUuid, userId), getMetaInfo(queryId, userId)))
     })
 
     new Queries(stateList)
   }
 
-  override def setMetaInfo(queryId: String, metainfo: QueryMetaInfo) {
-    logger.debug("Writing script meta info " + metainfo + " to query " + queryId)
+  override def setMetaInfo(queryId: String, metainfo: QueryMetaInfo, userId: String) {
+    logger.debug("Writing script meta info " + metainfo + " to query " + queryId + " for user " + userId)
     val buffer = metainfo.toJson.toString()
     Utils.rewriteFile(buffer, configuration, getQueryMetaInfoFilePath(queryId))
   }
 
-  override def getMetaInfo(queryId: String): QueryMetaInfo = {
-    logger.debug("Reading meta info for for query: " + queryId)
+  override def getMetaInfo(queryId: String, userId: String): QueryMetaInfo = {
+    logger.debug("Reading meta info for for query: " + queryId + " for user " + userId)
     val filePath = getQueryMetaInfoFilePath(queryId)
     if (Utils.checkFileExistence(filePath, configuration)) {
       val value = Utils.readFile(configuration, getQueryMetaInfoFilePath(queryId))
@@ -164,14 +162,14 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
     }
   }
 
-  override def getQueriesByName(name:String):Queries = {
+  override def getQueriesByName(name:String, userId: String):Queries = {
     Utils.TryWithRetry {
-      logger.debug(s"Reading queries states for queries with name $name")
+      logger.debug(s"Reading queries states for queries with name $name for user $userId")
 
       val filePath = getQueryNameFolderPath(name)
       if (Utils.checkFileExistence(filePath, configuration)) {
         val queryID =  Utils.readFile(configuration, filePath)
-        getQueries(List(queryID))
+        getQueries(List(queryID), userId)
       } else {
         new Queries(Array[Query]())
       }
@@ -185,15 +183,15 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
     }
   }
 
-  override def deleteQueryName(name: String): Unit = {
+  override def deleteQueryName(name: String, userId: String): Unit = {
     Utils.TryWithRetry {
-      logger.debug("Deleting query name " + name)
+      logger.debug("Deleting query name " + name + " for user " + userId)
       val filePath = getQueryNameFolderPath(name)
       Utils.deleteFile(configuration, filePath)
     }
   }
 
-  override def getPublishedQueries():Array[String] = {
+  override def getPublishedQueries(userId: String):Array[String] = {
     val folderName = configuration.get(Utils.QUERY_PUBLISHED_FOLDER)
     val files = Utils.listFiles(configuration, folderName, new Comparator[String]() {
       override def compare(o1: String, o2: String): Int = o2.compareTo(o1)
@@ -202,11 +200,11 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
     files.toArray(new Array[String](files.size()))
   }
 
-  def setQueryPublishedStatus(name: String, metaInfo: QueryMetaInfo, published: Boolean): Unit = {
+  def setQueryPublishedStatus(name: String, metaInfo: QueryMetaInfo, published: Boolean, userId: String): Unit = {
     Utils.TryWithRetry {
       logger.info(s"Updating published status of $name to $published")
       // Delete the old entry for query
-      deleteQueryPublishedStatus(name, metaInfo.published)
+      deleteQueryPublishedStatus(name, metaInfo.published, userId)
 
       val filePath = if (published) {
         getQueryPublishedFolderPath(name)
@@ -218,7 +216,7 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
     }
   }
 
-  def deleteQueryPublishedStatus(name: String, published: Option[Boolean]): Unit = {
+  def deleteQueryPublishedStatus(name: String, published: Option[Boolean], userId: String): Unit = {
     Utils.TryWithRetry {
       logger.info(s"Deleting query published status of $name")
       val filePath = if (published.isEmpty || !published.get) {
@@ -230,30 +228,30 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
     }
   }
 
-  def deleteQuery(queryId: String) {
-    logger.debug(s"Deleting query: $queryId")
+  def deleteQuery(queryId: String, userId: String) {
+    logger.debug(s"Deleting query $queryId for user $userId")
 
-    logger.debug(s"Deleting query state for: $queryId")
+    logger.debug(s"Deleting query state for $queryId for user $userId")
     var filePath = getQueryStateFilePath(queryId)
     Utils.deleteFile(configuration, filePath)
 
-    logger.debug(s"Deleting query details for: $queryId")
+    logger.debug(s"Deleting query details for $queryId for user $userId")
     filePath = getQueryDetailsFilePath(queryId)
     Utils.deleteFile(configuration, filePath)
 
-    val metaInfo = getMetaInfo(queryId)
+    val metaInfo = getMetaInfo(queryId, userId)
     if (metaInfo.name.isDefined && metaInfo.name.get != null) {
-      deleteQueryName(metaInfo.name.get)
+      deleteQueryName(metaInfo.name.get, userId)
       if (metaInfo.published.isDefined) {
-        deleteQueryPublishedStatus(metaInfo.name.get, metaInfo.published)
+        deleteQueryPublishedStatus(metaInfo.name.get, metaInfo.published, userId)
       }
     }
 
-    logger.debug(s"Deleting meta info for: $queryId")
+    logger.debug(s"Deleting meta info for $queryId for user $userId")
     filePath = getQueryMetaInfoFilePath(queryId)
     Utils.deleteFile(configuration, filePath)
 
-    logger.debug(s"Deleting query logs for: $queryId")
+    logger.debug(s"Deleting query logs for $queryId for user $userId")
     filePath = getQueryLogsFolderPath(queryId)
     Utils.deleteFile(configuration, filePath)
   }

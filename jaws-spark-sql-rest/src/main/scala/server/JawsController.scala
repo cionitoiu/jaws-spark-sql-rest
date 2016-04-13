@@ -78,7 +78,7 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
       val sContext = new SparkContext(sparkConf)
 
       val hContext = new HiveContextWrapper(sContext)
-      hContext.sparkContext.addSparkListener(new LoggingListener(dal))
+      hContext.sparkContext.addSparkListener(new LoggingListener(dal, "tempUser"))
 
       HiveUtils.setSharkProperties(hContext, this.getClass.getClassLoader.getResourceAsStream("sharkSettings.txt"))
       //make sure that lazy variable hiveConf gets initialized

@@ -8,68 +8,69 @@ import com.xpatterns.jaws.data.utils.Utils
 import com.xpatterns.jaws.data.DTO.Query
 
 /**
- * Created by emaorhian
- */
+  * Created by emaorhian
+  */
 trait TJawsLogging {
-  def setState(queryId: String, queryState: QueryState.QueryState)
-  def setScriptDetails(queryId: String, scriptDetails: String)
-  def addLog(queryId: String, jobId: String, time: Long, log: String)
+  def setState(queryId: String, queryState: QueryState.QueryState, userId: String)
+  def setScriptDetails(queryId: String, scriptDetails: String, userId: String)
+  def addLog(queryId: String, jobId: String, time: Long, log: String, userId: String)
 
-  def setExecutionTime(queryId: String, executionTime: Long): Unit = {
+  def setExecutionTime(queryId: String, executionTime: Long, userId: String): Unit = {
     Utils.TryWithRetry {
-      val metaInfo = getMetaInfo(queryId)
+      val metaInfo = getMetaInfo(queryId, userId)
       metaInfo.executionTime = executionTime
-      setMetaInfo(queryId, metaInfo)
+      setMetaInfo(queryId, metaInfo, userId)
     }
   }
 
-  def setTimestamp(queryId: String, time: Long): Unit = {
+  def setTimestamp(queryId: String, time: Long, userId: String): Unit = {
     Utils.TryWithRetry {
-      val metaInfo = getMetaInfo(queryId)
+      val metaInfo = getMetaInfo(queryId, userId)
       metaInfo.timestamp = time
-      setMetaInfo(queryId, metaInfo)
+      setMetaInfo(queryId, metaInfo, userId)
     }
   }
 
-  def setRunMetaInfo(queryId: String, metainfo: QueryMetaInfo) = {
+  def setRunMetaInfo(queryId: String, metainfo: QueryMetaInfo, userId: String) = {
     Utils.TryWithRetry {
-      val newMetaInfo = getMetaInfo(queryId)
+      val newMetaInfo = getMetaInfo(queryId, userId)
       newMetaInfo.nrOfResults = metainfo.nrOfResults
       newMetaInfo.maxNrOfResults = metainfo.maxNrOfResults
       newMetaInfo.resultsDestination = metainfo.resultsDestination
       newMetaInfo.isLimited = metainfo.isLimited
-      setMetaInfo(queryId, newMetaInfo)
+      setMetaInfo(queryId, newMetaInfo, userId)
     }
   }
 
   def setQueryProperties(queryId: String, name: Option[String], description: Option[String], published:Option[Boolean],
-                         overwrite: Boolean) = {
+                         overwrite: Boolean, userId: String) = {
     Utils.TryWithRetry {
-      val metaInfo = getMetaInfo(queryId)
+      val metaInfo = getMetaInfo(queryId, userId)
 
-      if (name != None) {
-        updateQueryName(queryId, metaInfo, name.get, overwrite)
+      if (name.isDefined) {
+        updateQueryName(queryId, metaInfo, name.get, overwrite, userId)
       }
 
-      if (description != None) {
+      if (description.isDefined) {
         metaInfo.description = description
       }
 
       // When the name of a query is not present, the description and published flags should be removed,
       // because they appear only when a query has a name
-      if (metaInfo.name == None || metaInfo.name.get == null) {
+      if (metaInfo.name.isEmpty || metaInfo.name.get == null) {
         metaInfo.description = None
         metaInfo.published = None
-      } else if (published != None) {
-        setQueryPublishedStatus(metaInfo.name.get, metaInfo, published.get)
+      } else if (published.isDefined) {
+        setQueryPublishedStatus(metaInfo.name.get, metaInfo, published.get, userId)
         metaInfo.published = published
       }
 
-      setMetaInfo(queryId, metaInfo)
+      setMetaInfo(queryId, metaInfo, userId)
     }
   }
 
-  private def updateQueryName(queryId: String, metaInfo: QueryMetaInfo, name: String, overwrite:Boolean):Unit = {
+  private def updateQueryName(queryId: String, metaInfo: QueryMetaInfo,
+                              name: String, overwrite:Boolean, userId: String):Unit = {
     val newQueryName = if (name != null) name.trim() else null
 
     if (newQueryName != null && newQueryName.isEmpty) {
@@ -77,29 +78,29 @@ trait TJawsLogging {
     }
 
     if (!overwrite) {
-      if (newQueryName != null && getQueriesByName(newQueryName).queries.nonEmpty) {
+      if (newQueryName != null && getQueriesByName(newQueryName, userId).queries.nonEmpty) {
         // When the query name already exist and the overwrite flag is not set,
         // then the client should be warned about it
-        throw new Exception(s"There is already a query with the name $name. To overwrite " +
+        throw new Exception(s"There is already a query with the name $name for user $userId. To overwrite " +
           s"the query name, please send the parameter overwrite set on true")
       }
     } else if (newQueryName != null) {
       // When overwriting the old values, the old queries should have the name and description reset
       val notFoundState = QueryState.NOT_FOUND.toString
-      for (query <- getQueriesByName(newQueryName).queries) {
+      for (query <- getQueriesByName(newQueryName, userId).queries) {
         if (query.state != notFoundState) {
           query.metaInfo.name = None
           query.metaInfo.description = None
-          setMetaInfo(query.queryID, query.metaInfo)
+          setMetaInfo(query.queryID, query.metaInfo, userId)
         }
       }
     }
 
-    if (metaInfo.name != None && metaInfo.name.get != null) {
+    if (metaInfo.name.isDefined && metaInfo.name.get != null) {
       // Delete the old query name
-      deleteQueryName(metaInfo.name.get)
+      deleteQueryName(metaInfo.name.get, userId)
       // Remove the old published status of the query from storage
-      deleteQueryPublishedStatus(metaInfo.name.get, metaInfo.published)
+      deleteQueryPublishedStatus(metaInfo.name.get, metaInfo.published, userId)
     }
     metaInfo.name = Some(newQueryName)
 
@@ -109,34 +110,35 @@ trait TJawsLogging {
 
       // Set the default published value
       val published = metaInfo.published.getOrElse(false)
-      setQueryPublishedStatus(newQueryName, metaInfo, published)
+      setQueryPublishedStatus(newQueryName, metaInfo, published, userId)
       metaInfo.published = Some(published)
     }
   }
 
-  def setQueryPublishedStatus(name: String, metaInfo: QueryMetaInfo, published: Boolean)
-  def deleteQueryPublishedStatus(name: String, published: Option[Boolean])
+  def setQueryPublishedStatus(name: String, metaInfo: QueryMetaInfo, published: Boolean, userId: String)
+  def deleteQueryPublishedStatus(name: String, published: Option[Boolean], userId: String)
 
-  def setMetaInfo(queryId: String, metainfo: QueryMetaInfo)
+  def setMetaInfo(queryId: String, metainfo: QueryMetaInfo, userId: String)
 
-  def getState(queryId: String): QueryState.QueryState
-  def getScriptDetails(queryId: String): String
-  def getLogs(queryId: String, time: Long, limit: Int): Logs
-  def getMetaInfo(queryId: String): QueryMetaInfo
+  def getState(queryId: String, userId: String): QueryState.QueryState
+  def getScriptDetails(queryId: String, userId: String): String
+  def getLogs(queryId: String, time: Long, limit: Int, userId: String): Logs
+  def getMetaInfo(queryId: String, userId: String): QueryMetaInfo
 
-  def getQueries(queryId: String, limit: Int): Queries
-  def getQueries(queryIds: Seq[String]): Queries = {
+  def getQueries(queryId: String, limit: Int, userId: String): Queries
+  def getQueries(queryIds: Seq[String], userId: String): Queries = {
     Utils.TryWithRetry {
-      val queryArray = queryIds map (queryID => new Query(getState(queryID).toString, queryID, getScriptDetails(queryID), getMetaInfo(queryID))) toArray
+      val queryArray = queryIds map (queryId => new Query(getState(queryId, userId).toString,
+        queryId, getScriptDetails(queryId, userId), getMetaInfo(queryId, userId))) toArray
       val queries = new Queries(queryArray)
       queries
     }
   }
 
-  def getPublishedQueries():Array[String]
-  def getQueriesByName(name:String):Queries
-  def deleteQueryName(name: String)
+  def getPublishedQueries(userId: String):Array[String]
+  def getQueriesByName(name:String, userId: String):Queries
+  def deleteQueryName(name: String, userId: String)
   def saveQueryName(name: String, queryId: String)
 
-  def deleteQuery(queryId: String)
+  def deleteQuery(queryId: String, userId: String)
 }

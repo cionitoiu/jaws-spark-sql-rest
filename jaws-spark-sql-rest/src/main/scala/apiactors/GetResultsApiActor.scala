@@ -36,7 +36,7 @@ class GetResultsApiActor(hdfsConf: org.apache.hadoop.conf.Configuration, hiveCon
         val getResultsFuture = future {
 
           val (offset, limit) = getOffsetAndLimit(message)
-          val metaInfo = dals.loggingDal.getMetaInfo(message.queryID)
+          val metaInfo = dals.loggingDal.getMetaInfo(message.queryID, "tempUser") ///change
 
           metaInfo.resultsDestination match {
             // cassandra

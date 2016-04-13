@@ -96,24 +96,30 @@ trait ParquetApi extends BaseApi with CORSDirectives {
    * </ul>
    */
   private def parquetRunRoute = path("run") {
-    post {
-      parameters('tablePath.as[String], 'pathType.as[String] ? "hdfs", 'table.as[String], 'numberOfResults.as[Int] ? 100,
-        'limited.as[Boolean], 'destination.as[String] ? Configuration.rddDestinationLocation.getOrElse("hdfs"),
-        'overwrite.as[Boolean] ? false) {
-        (tablePath, pathType, table, numberOfResults, limited, destination, overwrite) =>
-          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-            validateCondition(tablePath != null && !tablePath.trim.isEmpty, Configuration.FILE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-              validateCondition("hdfs".equals(pathType) || "tachyon".equals(pathType), Configuration.FILE_PATH_TYPE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-                validateCondition(table != null && !table.trim.isEmpty, Configuration.TABLE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-                  entity(as[String]) { query: String =>
-                    validateCondition(query != null && !query.trim.isEmpty, Configuration.SCRIPT_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-                      validateCondition(overwrite || !dals.parquetTableDal.tableExists(table), Configuration.TABLE_ALREADY_EXISTS_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-                        respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
-                          Configuration.log4j.info(s"The tablePath is $tablePath on namenode $pathType and the table name is $table")
-                          val future = ask(runScriptActor, RunParquetMessage(query, tablePath, getNamenodeFromPathType(pathType), table, limited, numberOfResults, destination))
-                          future.map {
-                            case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-                            case result: String  => ctx.complete(StatusCodes.OK, result)
+    securityFilter { userId =>
+      post {
+        parameters('tablePath.as[String], 'pathType.as[String] ? "hdfs", 'table.as[String], 'numberOfResults.as[Int] ? 100,
+          'limited.as[Boolean], 'destination.as[String] ? Configuration.rddDestinationLocation.getOrElse("hdfs"),
+          'overwrite.as[Boolean] ? false) {
+          (tablePath, pathType, table, numberOfResults, limited, destination, overwrite) =>
+            corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+              validateCondition(tablePath != null && !tablePath.trim.isEmpty, Configuration.FILE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                validateCondition("hdfs".equals(pathType) || "tachyon".equals(pathType),
+                  Configuration.FILE_PATH_TYPE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                  validateCondition(table != null && !table.trim.isEmpty, Configuration.TABLE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                    entity(as[String]) { query: String =>
+                      validateCondition(query != null && !query.trim.isEmpty, Configuration.SCRIPT_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                        validateCondition(overwrite || !dals.parquetTableDal.tableExists(table),
+                          Configuration.TABLE_ALREADY_EXISTS_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                          respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
+                            Configuration.log4j.info(s"The tablePath is $tablePath on namenode $pathType and the table name is $table")
+                            val future = ask(runScriptActor,
+                                             RunParquetMessage(query, tablePath, getNamenodeFromPathType(pathType),
+                                                               table, limited, numberOfResults, destination, userId))
+                            future.map {
+                              case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                              case result: String => ctx.complete(StatusCodes.OK, result)
+                            }
                           }
                         }
                       }
@@ -122,7 +128,7 @@ trait ParquetApi extends BaseApi with CORSDirectives {
                 }
               }
             }
-          }
+        }
       }
     } ~
       options {

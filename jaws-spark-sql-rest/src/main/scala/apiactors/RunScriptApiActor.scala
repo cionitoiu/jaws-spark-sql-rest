@@ -44,12 +44,14 @@ class RunScriptApiActor(hdfsConf: HadoopConfiguration, hiveContext: HiveContextW
 
       val uuid = System.currentTimeMillis() + UUID.randomUUID().toString
       val tryRun = Try {
-        Configuration.log4j.info("[RunScriptApiActor -run]: running the following script: " + message.script)
-        Configuration.log4j.info("[RunScriptApiActor -run]: The script will be executed with the limited flag set on " + message.limited + ". The maximum number of results is " + message.maxNumberOfResults)
+        Configuration.log4j.info("[RunScriptApiActor -run]: running the following script: " + message.script +
+                                 " for user " + message.userId)
+        Configuration.log4j.info("[RunScriptApiActor -run]: The script will be executed with the limited flag set on "
+                                  + message.limited + ". The maximum number of results is " + message.maxNumberOfResults)
 
         val task = new RunScriptTask(dals, hiveContext, uuid, hdfsConf, message)
         taskCache.put(uuid, task)
-        writeLaunchStatus(uuid, message.script)
+        writeLaunchStatus(uuid, message.script, message.userId)
         threadPool.execute(task)
       }
       returnResult(tryRun, uuid, "run query failed with the following message: ", sender())
@@ -59,7 +61,7 @@ class RunScriptApiActor(hdfsConf: HadoopConfiguration, hiveContext: HiveContextW
       val tryRunMessage = Try {
         // Make sure that there is a query with the sent name
         val queryName = message.name.trim()
-        val queries = dals.loggingDal.getQueriesByName(queryName).queries
+        val queries = dals.loggingDal.getQueriesByName(queryName, message.userId).queries
         if (queries.length == 0 || queries(0).query == null) {
           throw new Exception(s"There is no query with the name $queryName")
         }
@@ -67,40 +69,42 @@ class RunScriptApiActor(hdfsConf: HadoopConfiguration, hiveContext: HiveContextW
         val query = queries(0)
         // Set the previous query not published
         if (query.metaInfo.published == Some(true)) {
-          dals.loggingDal.deleteQueryPublishedStatus(query.metaInfo.name.get, query.metaInfo.published)
+          dals.loggingDal.deleteQueryPublishedStatus(query.metaInfo.name.get, query.metaInfo.published, message.userId)
         }
 
         // Save the query name and prepare a message to execute the run query
         dals.loggingDal.setQueryProperties(uuid, query.metaInfo.name, query.metaInfo.description,
-          query.metaInfo.published, overwrite = true)
+          query.metaInfo.published, overwrite = true, message.userId)
 
         val runScript = RunScriptMessage(query.query, query.metaInfo.isLimited, query.metaInfo.maxNrOfResults,
-          query.metaInfo.resultsDestination.toString)
+          query.metaInfo.resultsDestination.toString, message.userId)
         Configuration.log4j.info("[RunScriptApiActor -run]: running the following query: " + queryName)
         Configuration.log4j.info("[RunScriptApiActor -run]: running the following script: " + runScript.script)
-        Configuration.log4j.info("[RunScriptApiActor -run]: The script will be executed with the limited flag set on " + runScript.limited + ". The maximum number of results is " + runScript.maxNumberOfResults)
+        Configuration.log4j.info("[RunScriptApiActor -run]: The script will be executed with the limited flag set on "
+                                 + runScript.limited + ". The maximum number of results is " + runScript.maxNumberOfResults)
 
         val task = new RunScriptTask(dals, hiveContext, uuid, hdfsConf, runScript)
         taskCache.put(uuid, task)
-        writeLaunchStatus(uuid, query.query)
+        writeLaunchStatus(uuid, query.query, message.userId)
         threadPool.execute(task)
       }
       returnResult(tryRunMessage, uuid, "run query failed with the following message: ", sender())
 
-    case message: RunParquetMessage => {
+    case message: RunParquetMessage =>
       val uuid = System.currentTimeMillis() + UUID.randomUUID().toString
       val tryRunParquet = Try {
 
-        Configuration.log4j.info(s"[RunScriptApiActor -runParquet]: running the following sql: ${message.script}")
-        Configuration.log4j.info(s"[RunScriptApiActor -runParquet]: The script will be executed over the ${message.tablePath} file with the ${message.table} table name")
+        Configuration.log4j.info(s"[RunScriptApiActor -runParquet]: running the following sql: ${message.script} " +
+                                 s"for user ${message.userId}")
+        Configuration.log4j.info(s"[RunScriptApiActor -runParquet]: The script will be executed over " +
+                                 s"the ${message.tablePath} file with the ${message.table} table name")
      
         val task = new RunParquetScriptTask(dals, hiveContext, uuid, hdfsConf, message)
         taskCache.put(uuid, task)
-        writeLaunchStatus(uuid, message.script)
+        writeLaunchStatus(uuid, message.script, message.userId)
         threadPool.execute(task)
       }
       returnResult(tryRunParquet, uuid, "run parquet query failed with the following message: ", sender())
-    }
 
     case message: CancelMessage =>
       Configuration.log4j.info("[RunScriptApiActor]: Canceling the jobs for the following uuid: " + message.queryID)
@@ -108,11 +112,8 @@ class RunScriptApiActor(hdfsConf: HadoopConfiguration, hiveContext: HiveContextW
       val task = taskCache.getIfPresent(message.queryID)
 
       Option(task) match {
-        case None => {
-          Configuration.log4j.info("No job to be canceled")
-        }
-        case _ => {
-
+        case None => Configuration.log4j.info("No job to be canceled")
+        case _ =>
           task.setCanceled(true)
           taskCache.invalidate(message.queryID)
 
@@ -122,15 +123,13 @@ class RunScriptApiActor(hdfsConf: HadoopConfiguration, hiveContext: HiveContextW
           } else {
             Configuration.log4j.info("[RunScriptApiActor]: Jaws is running in fine grained mode!")
           }
-
-        }
       }
   }
 
-  private def writeLaunchStatus(uuid: String, script: String) {
-    HiveUtils.logMessage(uuid, s"Launching task for $uuid", "sparksql", dals.loggingDal)
-    dals.loggingDal.setState(uuid, QueryState.IN_PROGRESS)
-    dals.loggingDal.setScriptDetails(uuid, script)
+  private def writeLaunchStatus(uuid: String, script: String, userId: String) {
+    HiveUtils.logMessage(uuid, s"Launching task for $uuid", "sparksql", dals.loggingDal, userId)
+    dals.loggingDal.setState(uuid, QueryState.IN_PROGRESS, userId)
+    dals.loggingDal.setScriptDetails(uuid, script, userId)
   }
 
  

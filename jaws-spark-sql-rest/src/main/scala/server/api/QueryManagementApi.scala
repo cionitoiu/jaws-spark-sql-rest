@@ -75,38 +75,40 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
    */
   private def runRoute = path("run") {
     post {
-      // Execute the sent query
-      parameters('numberOfResults.as[Int] ? 100, 'limited.as[Boolean], 'destination.as[String] ? Configuration.rddDestinationLocation.getOrElse("hdfs")) {
-        (numberOfResults, limited, destination) =>
-          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-            entity(as[String]) { query: String =>
-              validateCondition(query != null && !query.trim.isEmpty, Configuration.SCRIPT_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+      securityFilter { userId =>
+        // Execute the sent query
+        parameters('numberOfResults.as[Int] ? 100, 'limited.as[Boolean], 'destination.as[String] ? Configuration.rddDestinationLocation.getOrElse("hdfs")) {
+          (numberOfResults, limited, destination) =>
+            corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+              entity(as[String]) { query: String =>
+                validateCondition(query != null && !query.trim.isEmpty, Configuration.SCRIPT_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                  respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
+                    Configuration.log4j.info(s"The query is limited=$limited and the destination is $destination")
+                    val future = ask(runScriptActor, RunScriptMessage(query, limited, numberOfResults, destination.toLowerCase, userId))
+                    future.map {
+                      case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                      case result: String => ctx.complete(StatusCodes.OK, result)
+                    }
+                  }
+                }
+              }
+            }
+        } ~
+          // Execute the query with the sent name
+          parameters('name.as[String]) { (queryName) =>
+            corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+              validateCondition(queryName != null && !queryName.trim.isEmpty, Configuration.QUERY_NAME_MESSAGE, StatusCodes.BadRequest) {
                 respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
-                  Configuration.log4j.info(s"The query is limited=$limited and the destination is $destination")
-                  val future = ask(runScriptActor, RunScriptMessage(query, limited, numberOfResults, destination.toLowerCase))
+                  Configuration.log4j.info(s"Running the query with name $queryName")
+                  val future = ask(runScriptActor, RunQueryMessage(queryName.trim, userId))
                   future.map {
                     case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-                    case result: String  => ctx.complete(StatusCodes.OK, result)
+                    case result: String => ctx.complete(StatusCodes.OK, result)
                   }
                 }
               }
             }
           }
-      } ~
-      // Execute the query with the sent name
-      parameters('name.as[String]) { (queryName) =>
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-          validateCondition(queryName != null && !queryName.trim.isEmpty, Configuration.QUERY_NAME_MESSAGE, StatusCodes.BadRequest) {
-            respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
-              Configuration.log4j.info(s"Running the query with name $queryName")
-              val future = ask(runScriptActor, RunQueryMessage(queryName.trim))
-              future.map {
-                case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-                case result: String => ctx.complete(StatusCodes.OK, result)
-              }
-            }
-          }
-        }
       }
     } ~
       options {
@@ -136,18 +138,20 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
    */
   private def logsRoute = path("logs") {
     get {
-      parameters('queryID, 'startTimestamp.as[Long].?, 'limit.as[Int]) { (queryID, startTimestamp, limit) =>
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-          validateCondition(queryID != null && !queryID.trim.isEmpty, Configuration.UUID_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-            respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-              var timestamp: java.lang.Long = 0L
-              if (startTimestamp.isDefined) {
-                timestamp = startTimestamp.get
-              }
-              val future = ask(getLogsActor, GetLogsMessage(queryID, timestamp, limit))
-              future.map {
-                case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-                case result: Logs    => ctx.complete(StatusCodes.OK, result)
+      securityFilter { userId =>
+        parameters('queryID, 'startTimestamp.as[Long].?, 'limit.as[Int]) { (queryID, startTimestamp, limit) =>
+          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+            validateCondition(queryID != null && !queryID.trim.isEmpty, Configuration.UUID_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+              respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+                var timestamp: java.lang.Long = 0L
+                if (startTimestamp.isDefined) {
+                  timestamp = startTimestamp.get
+                }
+                val future = ask(getLogsActor, GetLogsMessage(queryID, timestamp, limit, userId))
+                future.map {
+                  case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                  case result: Logs => ctx.complete(StatusCodes.OK, result)
+                }
               }
             }
           }
@@ -235,7 +239,9 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
   private def queriesRoute = pathPrefix("queries") {
     queriesPublishedRoute ~ queriesGetRoute ~ queriesPutRoute ~ queriesDeleteRoute ~
       options {
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*")), HttpHeaders.`Access-Control-Allow-Methods`(Seq(HttpMethods.OPTIONS, HttpMethods.GET, HttpMethods.DELETE))) {
+        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*")),
+                        HttpHeaders.`Access-Control-Allow-Methods`(Seq(HttpMethods.OPTIONS, HttpMethods.GET,
+                                                                       HttpMethods.DELETE))) {
           complete {
             "OK"
           }
@@ -249,13 +255,15 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
    */
   private def queriesPublishedRoute = path("published") {
     get {
-      corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-        respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-          val future = ask(getQueriesActor, GetPublishedQueries())
+      securityFilter { userId =>
+        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+          respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+            val future = ask(getQueriesActor, GetPublishedQueries(userId))
 
-          future.map {
-            case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-            case result:Array[String] => ctx.complete(StatusCodes.OK, result)
+            future.map {
+              case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+              case result: Array[String] => ctx.complete(StatusCodes.OK, result)
+            }
           }
         }
       }
@@ -284,34 +292,35 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
    */
   private def queriesGetRoute = pathEnd {
     get {
-      parameterSeq { params =>
+      securityFilter { userId =>
+        parameterSeq { params =>
+          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+            respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+              var limit: Int = 100
+              var startQueryID: String = null
+              val queries = ListBuffer[String]()
+              var queryName: String = null
 
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-          respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-            var limit: Int = 100
-            var startQueryID: String = null
-            val queries = ListBuffer[String]()
-            var queryName: String = null
+              params.foreach {
+                case ("limit", value) => limit = Try(value.toInt).getOrElse(100)
+                case ("startQueryID", value) => startQueryID = Option(value).orNull
+                case ("queryID", value) if value.nonEmpty => queries += value
+                case ("name", value) if value.trim.nonEmpty => queryName = value.trim()
+                case (key, value) => Configuration.log4j.warn(s"Unknown parameter $key!")
+              }
 
-            params.foreach {
-              case ("limit", value)                         => limit = Try(value.toInt).getOrElse(100)
-              case ("startQueryID", value)                  => startQueryID = Option(value).orNull
-              case ("queryID", value) if value.nonEmpty     => queries += value
-              case ("name", value) if value.trim.nonEmpty   => queryName = value.trim()
-              case (key, value)                             => Configuration.log4j.warn(s"Unknown parameter $key!")
-            }
+              val future = if (queryName != null && queryName.nonEmpty) {
+                ask(getQueriesActor, GetQueriesByName(queryName, userId))
+              } else if (queries.isEmpty) {
+                ask(getQueriesActor, GetPaginatedQueriesMessage(startQueryID, limit, userId))
+              } else {
+                ask(getQueriesActor, GetQueriesMessage(queries, userId))
+              }
 
-            val future = if (queryName != null && queryName.nonEmpty) {
-              ask(getQueriesActor, GetQueriesByName(queryName))
-            } else if (queries.isEmpty) {
-              ask(getQueriesActor, GetPaginatedQueriesMessage(startQueryID, limit))
-            } else {
-              ask(getQueriesActor, GetQueriesMessage(queries))
-            }
-
-            future.map {
-              case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-              case result: Queries => ctx.complete(StatusCodes.OK, result)
+              future.map {
+                case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                case result: Queries => ctx.complete(StatusCodes.OK, result)
+              }
             }
           }
         }
@@ -348,22 +357,24 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
    * </ul>
    */
   private def queriesPutRoute = put {
-    (path(Segment) & entity(as[QueryMetaInfo]) & parameter("overwrite".as[Boolean] ? false)) {
-      (queryID, metaInfo, overwrite) =>
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-          validateCondition(queryID != null && !queryID.trim.isEmpty, Configuration.UUID_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-            validateCondition(metaInfo != null, Configuration.META_INFO_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-              respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
-                val future = ask(queryPropertiesApiActor, new UpdateQueryPropertiesMessage(queryID, metaInfo.name,
-                  metaInfo.description, metaInfo.published, overwrite))
-                future.map {
-                  case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-                  case message: String => ctx.complete(StatusCodes.OK, message)
+    securityFilter { userId =>
+      (path(Segment) & entity(as[QueryMetaInfo]) & parameter("overwrite".as[Boolean] ? false)) {
+        (queryID, metaInfo, overwrite) =>
+          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+            validateCondition(queryID != null && !queryID.trim.isEmpty, Configuration.UUID_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+              validateCondition(metaInfo != null, Configuration.META_INFO_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
+                  val future = ask(queryPropertiesApiActor, new UpdateQueryPropertiesMessage(queryID, metaInfo.name,
+                    metaInfo.description, metaInfo.published, overwrite, userId))
+                  future.map {
+                    case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                    case message: String => ctx.complete(StatusCodes.OK, message)
+                  }
                 }
               }
             }
           }
-        }
+      }
     }
   }
 
@@ -377,14 +388,16 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
    * </ul>
    */
   private def queriesDeleteRoute = delete {
-    path(Segment) { queryID =>
-      corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-        validateCondition(queryID != null && !queryID.trim.isEmpty, Configuration.UUID_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-          respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
-            val future = ask(deleteQueryActor, new DeleteQueryMessage(queryID))
-            future.map {
-              case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-              case message: String => ctx.complete(StatusCodes.OK, message)
+    securityFilter { userId =>
+      path(Segment) { queryID =>
+        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+          validateCondition(queryID != null && !queryID.trim.isEmpty, Configuration.UUID_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+            respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
+              val future = ask(deleteQueryActor, new DeleteQueryMessage(queryID, userId))
+              future.map {
+                case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                case message: String => ctx.complete(StatusCodes.OK, message)
+              }
             }
           }
         }

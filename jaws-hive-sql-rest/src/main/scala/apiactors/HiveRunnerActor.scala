@@ -23,24 +23,24 @@ import com.xpatterns.jaws.data.utils.Utils._
  * Created by emaorhian
  */
 
-case class RunQueryMessage(script: String, limit: Int)
+case class RunQueryMessage(script: String, limit: Int, userId: String)
 case class ErrorMessage(message: String)
 
 class HiveRunnerActor(dals: DAL) extends Actor {
 
   override def receive = {
 
-    case message: RunQueryMessage => {
+    case message: RunQueryMessage =>
       Configuration.log4j.info(s"[HiveRunnerActor]: Running script=${message.script}")
       val uuid = System.currentTimeMillis + UUID.randomUUID.toString
       implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(Configuration.nrOfThreads.getOrElse("10").toInt))
       var script = ""
 
       val startTime = System.currentTimeMillis
-      dals.loggingDal.setTimestamp(uuid, startTime)
+      dals.loggingDal.setTimestamp(uuid, startTime, message.userId)
 
       val tryPreRunScript = Try {
-        writeLaunchStatus(uuid, message.script)
+        writeLaunchStatus(uuid, message.script, message.userId)
         script = prepareCommands(message.script, message.limit)
       }
 
@@ -51,26 +51,25 @@ class HiveRunnerActor(dals: DAL) extends Actor {
 
       val runResponse = future {
         Configuration.log4j.info(s"[HiveRunnerActor]: Executing commands $script")
-        runHiveScript(script, uuid)
+        runHiveScript(script, uuid, message.userId)
       }
 
       runResponse onComplete {
         case Success(s) =>
-          val message = s"[HiveRunnerActor]: Query $uuid has successfully finished"
+          val mes = s"[HiveRunnerActor]: Query $uuid has successfully finished"
           dals.resultsDal.setResults(uuid, s)
-          setStatus(uuid, message, QueryState.DONE)
+          setStatus(uuid, mes, QueryState.DONE, message.userId)
           val executionTime = System.currentTimeMillis - startTime
-          dals.loggingDal.setExecutionTime(uuid, executionTime)
+          dals.loggingDal.setExecutionTime(uuid, executionTime, message.userId)
 
         case Failure(e) =>
-          val message = s"[HiveRunnerActor]: Query $uuid has failed with the following exception ${getCompleteStackTrace(e)}"
-          setStatus(uuid, message, QueryState.FAILED)
+          val mes = s"[HiveRunnerActor]: Query $uuid has failed with the following exception ${getCompleteStackTrace(e)}"
+          setStatus(uuid, mes, QueryState.FAILED, message.userId)
 
       }
-    }
   }
 
-  private def runHiveScript(script: String, uuid: String) = {
+  private def runHiveScript(script: String, uuid: String, userId: String) = {
     val stdOutOS = new ByteArrayOutputStream
     val osWriter = new OutputStreamWriter(stdOutOS)
 
@@ -81,7 +80,7 @@ class HiveRunnerActor(dals: DAL) extends Actor {
         stdOutLine => osWriter.write(s"$stdOutLine\n"),
         stdErrLine => {
           Configuration.log4j.info(stdErrLine)
-          dals.loggingDal.addLog(uuid, "hive", System.currentTimeMillis(), stdErrLine)
+          dals.loggingDal.addLog(uuid, "hive", System.currentTimeMillis(), stdErrLine, userId)
         })
       osWriter flush ()
 
@@ -92,15 +91,15 @@ class HiveRunnerActor(dals: DAL) extends Actor {
     }
   }
 
-  private def writeLaunchStatus(uuid: String, script: String) {
-    dals.loggingDal.addLog(uuid, "hive", System.currentTimeMillis(), s"Launching task for $uuid")
-    dals.loggingDal.setState(uuid, QueryState.IN_PROGRESS)
-    dals.loggingDal.setScriptDetails(uuid, script)
+  private def writeLaunchStatus(uuid: String, script: String, userId: String) {
+    dals.loggingDal.addLog(uuid, "hive", System.currentTimeMillis(), s"Launching task for $uuid", userId)
+    dals.loggingDal.setState(uuid, QueryState.IN_PROGRESS, userId)
+    dals.loggingDal.setScriptDetails(uuid, script, userId)
   }
 
-  private def setStatus(uuid: String, message: String, status: QueryState.Value) {
+  private def setStatus(uuid: String, message: String, status: QueryState.Value, userId: String) {
     Configuration.log4j.info(message)
-    dals.loggingDal.addLog(uuid, "hive", System.currentTimeMillis(), message)
-    dals.loggingDal.setState(uuid, status)
+    dals.loggingDal.addLog(uuid, "hive", System.currentTimeMillis(), message, userId)
+    dals.loggingDal.setState(uuid, status, userId)
   }
 }
