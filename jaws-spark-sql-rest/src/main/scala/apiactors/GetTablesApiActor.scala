@@ -1,27 +1,23 @@
 package apiactors
 
+import java.util.concurrent.TimeUnit
+
 import messages._
-import spray.http.StatusCodes
 import scala.concurrent.Await
 import com.xpatterns.jaws.data.contracts.DAL
-import java.util.UUID
 import akka.util.Timeout
 import server.Configuration
-import scala.collection.immutable.Map
 import akka.pattern.ask
 import org.apache.spark.sql.hive.HiveUtils
 import implementation.HiveContextWrapper
 import akka.actor.Actor
-import scala.util.{ Try, Success, Failure }
-import apiactors.ActorOperations._
-import scala.collection.immutable.HashMap
+import scala.util.{ Success, Failure }
 import scala.concurrent._
 import ExecutionContext.Implicits.global
 import messages.ErrorMessage
 import com.xpatterns.jaws.data.DTO.Table
 import com.xpatterns.jaws.data.DTO.Databases
 import com.xpatterns.jaws.data.DTO.Tables
-import com.xpatterns.jaws.data.utils.Utils._
 import com.xpatterns.jaws.data.DTO.Column
 /**
  * Created by emaorhian
@@ -35,7 +31,7 @@ case class Regular() extends DescriptionType
 class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Actor {
 
   val databasesActor = context.actorSelection(ActorsPaths.GET_DATABASES_ACTOR_PATH)
-  implicit val timeout = Timeout(Configuration.timeout)
+  implicit val timeout = Timeout(Configuration.timeout, TimeUnit.MILLISECONDS)
 
   def getTablesForDatabase(database: String, isExtended: DescriptionType, describe: Boolean): Tables = {
     Configuration.log4j.info(s"[GetTablesApiActor]: showing tables for database $database, describe = $describe")
@@ -78,7 +74,7 @@ class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
         // if no database is specified, the tables for all databases will be retrieved
         Option(message.database).getOrElse("") match {
           case "" => {
-            val future = ask(databasesActor, GetDatabasesMessage())
+            val future = ask(databasesActor, GetDatabasesMessage("TestUser"))
             val allDatabases = Await.result(future, timeout.duration)
 
             allDatabases match {

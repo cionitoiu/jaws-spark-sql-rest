@@ -7,7 +7,7 @@ import org.apache.hadoop.conf.Configuration
  * Created by emaorhian
  */
 case class CancelMessage(queryID: String) extends Serializable
-case class GetDatabasesMessage()
+case class GetDatabasesMessage(userId: String)
 case class GetQueriesMessage(queryIDs: Seq[String])
 case class GetQueriesByName(name: String)
 case class GetPublishedQueries()

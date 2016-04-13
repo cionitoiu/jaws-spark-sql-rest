@@ -14,7 +14,7 @@ import apiactors.ActorsPaths._
 /**
  * The base trait api. It contains the common data used by the other api classes.
  */
-trait BaseApi extends HttpService {
+trait BaseApi extends SecurityApi {
   // The default timeout for the futures
   implicit val timeout = Timeout(Configuration.timeout.toInt, TimeUnit.MILLISECONDS)
 

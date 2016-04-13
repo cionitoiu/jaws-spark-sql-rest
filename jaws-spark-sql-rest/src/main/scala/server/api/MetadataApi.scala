@@ -52,13 +52,14 @@ trait MetadataApi extends BaseApi with CORSDirectives {
    */
   private def hiveDatabasesRoute = path("databases") {
     get {
-      corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-
-        respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-          val future = ask(getDatabasesActor, GetDatabasesMessage())
-          future.map {
-            case e: ErrorMessage   => ctx.complete(StatusCodes.InternalServerError, e.message)
-            case result: Databases => ctx.complete(StatusCodes.OK, result)
+      securityFilter { userId =>
+        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+          respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+            val future = ask(getDatabasesActor, GetDatabasesMessage(userId))
+            future.map {
+              case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+              case result: Databases => ctx.complete(StatusCodes.OK, result)
+            }
           }
         }
       }
@@ -281,7 +282,8 @@ trait MetadataApi extends BaseApi with CORSDirectives {
 
   /**
    * Extracts the tables parameters from the http request
-   * @param params the parameters sent through http request
+    *
+    * @param params the parameters sent through http request
    * @return a tuple with the information about database, describe flag and tables
    */
   private def getTablesParameters(params: Seq[(String, String)]) = {
