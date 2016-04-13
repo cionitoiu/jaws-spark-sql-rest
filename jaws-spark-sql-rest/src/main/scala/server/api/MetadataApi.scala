@@ -109,19 +109,21 @@ trait MetadataApi extends BaseApi with CORSDirectives {
    */
   private def hiveTablesDefaultRoute = pathEnd {
     get {
-      parameterSeq { params =>
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+      securityFilter { userId =>
+        parameterSeq { params =>
+          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
 
-          respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+            respondWithMediaType(MediaTypes.`application/json`) { ctx =>
 
-            val (database, describe, tables) = getTablesParameters(params)
+              val (database, describe, tables) = getTablesParameters(params)
 
-            Configuration.log4j.info(s"Retrieving table information for database=$database, tables= $tables, with describe flag set on: $describe")
-            val future = ask(getTablesActor, new GetTablesMessage(database, describe, tables))
+              Configuration.log4j.info(s"Retrieving table information for database=$database, tables= $tables, with describe flag set on: $describe")
+              val future = ask(getTablesActor, new GetTablesMessage(database, describe, tables, userId))
 
-            future.map {
-              case e: ErrorMessage       => ctx.complete(StatusCodes.InternalServerError, e.message)
-              case result: Array[Tables] => ctx.complete(StatusCodes.OK, result)
+              future.map {
+                case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                case result: Array[Tables] => ctx.complete(StatusCodes.OK, result)
+              }
             }
           }
         }
@@ -152,21 +154,23 @@ trait MetadataApi extends BaseApi with CORSDirectives {
    */
   private def hiveTablesExtendedRoute = path("extended") {
     get {
-      parameterSeq { params =>
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-          val (database, _, tables) = getTablesParameters(params)
-          validateCondition(database != null && !database.trim.isEmpty, Configuration.DATABASE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-            respondWithMediaType(MediaTypes.`application/json`) {
-              ctx =>
+      securityFilter { userId =>
+        parameterSeq { params =>
+          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+            val (database, _, tables) = getTablesParameters(params)
+            validateCondition(database != null && !database.trim.isEmpty, Configuration.DATABASE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+              respondWithMediaType(MediaTypes.`application/json`) {
+                ctx =>
 
-                Configuration.log4j.info(s"Retrieving extended table information for database=$database, tables= $tables")
-                val future = ask(getTablesActor, new GetExtendedTablesMessage(database, tables))
+                  Configuration.log4j.info(s"Retrieving extended table information for database=$database, tables= $tables")
+                  val future = ask(getTablesActor, new GetExtendedTablesMessage(database, tables, userId))
 
-                future.map {
-                  case e: ErrorMessage       => ctx.complete(StatusCodes.InternalServerError, e.message)
-                  case result: Array[Tables] => ctx.complete(StatusCodes.OK, result)
-                  case _                     => ctx.complete(StatusCodes.Accepted, "Other")
-                }
+                  future.map {
+                    case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                    case result: Array[Tables] => ctx.complete(StatusCodes.OK, result)
+                    case _ => ctx.complete(StatusCodes.Accepted, "Other")
+                  }
+              }
             }
           }
         }
@@ -197,23 +201,25 @@ trait MetadataApi extends BaseApi with CORSDirectives {
    */
   private def hiveTablesFormattedRoute = path("formatted") {
     get {
-      parameterSeq {
-        params =>
-          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-            val (database, _, tables) = getTablesParameters(params)
-            validateCondition(database != null && !database.trim.isEmpty, Configuration.DATABASE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
-              respondWithMediaType(MediaTypes.`application/json`) {
-                ctx =>
-                  Configuration.log4j.info(s"Retrieving formatted table information for database=$database, tables= $tables")
-                  val future = ask(getTablesActor, new GetFormattedTablesMessage(database, tables.toArray))
+      securityFilter { userId =>
+        parameterSeq {
+          params =>
+            corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+              val (database, _, tables) = getTablesParameters(params)
+              validateCondition(database != null && !database.trim.isEmpty, Configuration.DATABASE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+                respondWithMediaType(MediaTypes.`application/json`) {
+                  ctx =>
+                    Configuration.log4j.info(s"Retrieving formatted table information for database=$database, tables= $tables")
+                    val future = ask(getTablesActor, new GetFormattedTablesMessage(database, tables.toArray, userId))
 
-                  future.map {
-                    case e: ErrorMessage       => ctx.complete(StatusCodes.InternalServerError, e.message)
-                    case result: Array[Tables] => ctx.complete(StatusCodes.OK, result)
-                  }
+                    future.map {
+                      case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                      case result: Array[Tables] => ctx.complete(StatusCodes.OK, result)
+                    }
+                }
               }
             }
-          }
+        }
       }
     } ~
       options {

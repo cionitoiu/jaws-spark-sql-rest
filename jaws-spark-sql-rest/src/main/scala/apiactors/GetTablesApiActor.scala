@@ -67,23 +67,22 @@ class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
 
   override def receive = {
 
-    case message: GetTablesMessage => {
+    case message: GetTablesMessage =>
+      Configuration.log4j.info("[GetTablesApiActor]: showing tables for user " + message.userId)
       val currentSender = sender
 
       val getTablesFutures = future {
         // if no database is specified, the tables for all databases will be retrieved
         Option(message.database).getOrElse("") match {
-          case "" => {
-            val future = ask(databasesActor, GetDatabasesMessage("TestUser"))
+          case "" =>
+            val future = ask(databasesActor, GetDatabasesMessage(message.userId))
             val allDatabases = Await.result(future, timeout.duration)
 
             allDatabases match {
               case e: ErrorMessage   => throw new Exception(e.message)
               case result: Databases => result.databases.map(db => getTablesForDatabase(db, new Regular, message.describe))
             }
-
-          }
-          case _ => {
+          case _ =>
             // if there is a list of tables specified, then
             if (Option(message.tables).getOrElse(Array.empty).isEmpty) {
               Array(getTablesForDatabase(message.database, new Regular, message.describe))
@@ -91,7 +90,6 @@ class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
             } else {
               Array(Tables(message.database, message.tables map (table => describeTable(message.database, table, new Regular))))
             }
-          }
         }
       }
 
@@ -99,9 +97,9 @@ class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
         case Success(result) => currentSender ! result
         case Failure(e)      => currentSender ! ErrorMessage(s"GET tables failed with the following message: ${e.getMessage}")
       }
-    }
 
-    case message: GetExtendedTablesMessage => {
+    case message: GetExtendedTablesMessage =>
+      Configuration.log4j.info("[GetTablesApiActor]: showing extended tables for user " + message.userId)
       val currentSender = sender
       val getExtendedTablesFuture = future {
         Option(message.tables).getOrElse(Array.empty).isEmpty match {
@@ -114,9 +112,10 @@ class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
         case Success(result) => currentSender ! result
         case Failure(e)      => currentSender ! ErrorMessage(s"GET extended tables failed with the following message: ${e.getMessage}")
       }
-    }
 
-    case message: GetFormattedTablesMessage => {
+
+    case message: GetFormattedTablesMessage =>
+      Configuration.log4j.info("[GetTablesApiActor]: showing formatted tables for user " + message.userId)
       val currentSender = sender
 
       val getFormattedTablesFuture = future {
@@ -130,7 +129,6 @@ class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
         case Success(result) => currentSender ! result
         case Failure(e)      => currentSender ! ErrorMessage(s"GET formatted tables failed with the following message: ${e.getMessage}")
       }
-    }
 
   }
 
