@@ -66,7 +66,7 @@ class RunScriptTask(dals: DAL, hiveContext: HiveContextWrapper,
     }
   }
 
-  def executeCommands(commands: List[String]): ResultsConverter = {
+  private def executeCommands(commands: List[String]): ResultsConverter = {
     var result: ResultsConverter = null
     val nrOfCommands = commands.size
 

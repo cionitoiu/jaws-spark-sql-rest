@@ -2,7 +2,7 @@ package apiactors
 
 import scala.concurrent._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.hive.HiveContext
+import implementation.HiveContextWrapper
 import com.xpatterns.jaws.data.utils.Utils
 import server.Configuration
 import akka.actor.Actor
@@ -25,7 +25,7 @@ import com.xpatterns.jaws.data.DTO.AvroBinaryResult
 /**
  * Created by emaorhian
  */
-class GetResultsApiActor(hdfsConf: org.apache.hadoop.conf.Configuration, hiveContext: HiveContext, dals: DAL) extends Actor {
+class GetResultsApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Actor {
   implicit val formats = DefaultFormats
   override def receive = {
 
@@ -52,12 +52,12 @@ class GetResultsApiActor(hdfsConf: org.apache.hadoop.conf.Configuration, hiveCon
             //hdfs
             case 1 =>
               val destinationPath = HiveUtils.getHdfsPath(Configuration.rddDestinationIp.get)
-              getFormattedResult(message.format, getResults(offset, limit, destinationPath))
+              getFormattedResult(message.format, getResults(offset, limit, destinationPath, message.hdfsConf))
 
             //tachyon
             case 2 =>
               val destinationPath = HiveUtils.getTachyonPath(Configuration.rddDestinationIp.get)
-              getFormattedResult(message.format, getResults(offset, limit, destinationPath))
+              getFormattedResult(message.format, getResults(offset, limit, destinationPath, message.hdfsConf))
 
             case _ =>
               Configuration.log4j.info("[GetResultsMessage]: Unidentified results path : " + metaInfo.resultsDestination)
@@ -73,7 +73,7 @@ class GetResultsApiActor(hdfsConf: org.apache.hadoop.conf.Configuration, hiveCon
 
       }
 
-      def getResults(offset: Int, limit: Int, destinationPath: String): ResultsConverter = {
+      def getResults(offset: Int, limit: Int, destinationPath: String, hdfsConf: org.apache.hadoop.conf.Configuration): ResultsConverter = {
         val schemaBytes = Utils.readBytes(hdfsConf, Configuration.schemaFolder.getOrElse("jawsSchemaFolder") + "/" + message.queryID)
         val schema = HiveUtils.deserializaSchema(schemaBytes)
 

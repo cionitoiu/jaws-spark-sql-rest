@@ -26,7 +26,7 @@ import customs.CustomDirectives._
  */
 trait QueryManagementApi extends BaseApi with CORSDirectives {
   // Actor used for getting results for a query
-  lazy val getResultsActor = createActor(Props(new GetResultsApiActor(hdfsConf, hiveContext, dals)), GET_RESULTS_ACTOR_NAME, localSupervisor)
+  lazy val getResultsActor = createActor(Props(new GetResultsApiActor(hiveContext, dals)), GET_RESULTS_ACTOR_NAME, localSupervisor)
 
   // Actor used for getting logs for a query
   lazy val getLogsActor = createActor(Props(new GetLogsApiActor(dals)), GET_LOGS_ACTOR_NAME, localSupervisor)
@@ -194,14 +194,15 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
       securityFilter { userId =>
         parameters('queryID, 'offset.as[Int], 'limit.as[Int], 'format ? "default") { (queryID, offset, limit, format) =>
           corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-            validateCondition(queryID != null && !queryID.trim.isEmpty, Configuration.UUID_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
+            validateCondition(queryID != null && !queryID.trim.isEmpty,
+                              Configuration.UUID_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
               respondWithMediaType(MediaTypes.`application/json`) { ctx =>
 
                 implicit def customResultMarshaller[T] = Marshaller.delegate[T, String](ContentTypes.`application/json`) {
                   value ⇒ customGson.toJson(value)
                 }
 
-                val future = ask(getResultsActor, GetResultsMessage(queryID, offset, limit, format.toLowerCase, userId))
+                val future = ask(getResultsActor, GetResultsMessage(queryID, offset, limit, format.toLowerCase, userId, hdfsConf))
                 future.map {
                   case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
                   case result: Any => ctx.complete(StatusCodes.OK, result)
@@ -213,7 +214,8 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
       }
     } ~
       options {
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*")), HttpHeaders.`Access-Control-Allow-Methods`(Seq(HttpMethods.OPTIONS, HttpMethods.GET))) {
+        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*")),
+                   HttpHeaders.`Access-Control-Allow-Methods`(Seq(HttpMethods.OPTIONS, HttpMethods.GET))) {
           complete {
             "OK"
           }

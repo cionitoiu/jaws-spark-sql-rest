@@ -3,11 +3,9 @@ package apiactors
 import java.util.concurrent.TimeUnit
 
 import messages._
-import scala.concurrent.Await
 import com.xpatterns.jaws.data.contracts.DAL
 import akka.util.Timeout
 import server.Configuration
-import akka.pattern.ask
 import org.apache.spark.sql.hive.HiveUtils
 import implementation.HiveContextWrapper
 import akka.actor.Actor
@@ -28,12 +26,11 @@ case class Extended() extends DescriptionType
 case class Formatted() extends DescriptionType
 case class Regular() extends DescriptionType
 
-class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Actor {
+class GetMetadataApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Actor {
 
-  val databasesActor = context.actorSelection(ActorsPaths.GET_DATABASES_ACTOR_PATH)
   implicit val timeout = Timeout(Configuration.timeout, TimeUnit.MILLISECONDS)
 
-  def getTablesForDatabase(database: String, isExtended: DescriptionType, describe: Boolean): Tables = {
+  private def getTablesForDatabase(database: String, isExtended: DescriptionType, describe: Boolean): Tables = {
     Configuration.log4j.info(s"[GetTablesApiActor]: showing tables for database $database, describe = $describe")
 
     HiveUtils.runMetadataCmd(hiveContext, s"use $database")
@@ -46,7 +43,7 @@ class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
     Tables(database, tables)
   }
 
-  def describeTable(database: String, table: String, isExtended: DescriptionType): Table = {
+  private def describeTable(database: String, table: String, isExtended: DescriptionType): Table = {
     Configuration.log4j.info(s"[GetTablesApiActor]: describing table $table from database $database")
     HiveUtils.runMetadataCmd(hiveContext, s"use $database")
 
@@ -65,23 +62,34 @@ class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
     Table(table, columns, extraInfo)
   }
 
+  private def getDatabases = {
+    val metadataQueryResult = HiveUtils.runMetadataCmd(hiveContext, "show databases").flatten
+    new Databases(metadataQueryResult)
+  }
+
   override def receive = {
 
+    case message: GetDatabasesMessage =>
+      Configuration.log4j.info("[GetMetadataApiActor]: showing databases for user " + message.userId)
+      val currentSender = sender
+
+      val getDatabasesFuture = future {getDatabases}
+
+      getDatabasesFuture onComplete {
+        case Success(result) => currentSender ! result
+        case Failure(e) => currentSender ! ErrorMessage(s"GET databases failed with the following message: ${e.getMessage}")
+      }
+
     case message: GetTablesMessage =>
-      Configuration.log4j.info("[GetTablesApiActor]: showing tables for user " + message.userId)
+      Configuration.log4j.info("[GetMetadataApiActor]: showing tables for user " + message.userId)
       val currentSender = sender
 
       val getTablesFutures = future {
         // if no database is specified, the tables for all databases will be retrieved
         Option(message.database).getOrElse("") match {
           case "" =>
-            val future = ask(databasesActor, GetDatabasesMessage(message.userId))
-            val allDatabases = Await.result(future, timeout.duration)
+            getDatabases.databases.map(db => getTablesForDatabase(db, new Regular, message.describe))
 
-            allDatabases match {
-              case e: ErrorMessage   => throw new Exception(e.message)
-              case result: Databases => result.databases.map(db => getTablesForDatabase(db, new Regular, message.describe))
-            }
           case _ =>
             // if there is a list of tables specified, then
             if (Option(message.tables).getOrElse(Array.empty).isEmpty) {
@@ -99,7 +107,7 @@ class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
       }
 
     case message: GetExtendedTablesMessage =>
-      Configuration.log4j.info("[GetTablesApiActor]: showing extended tables for user " + message.userId)
+      Configuration.log4j.info("[GetMetadataApiActor]: showing extended tables for user " + message.userId)
       val currentSender = sender
       val getExtendedTablesFuture = future {
         Option(message.tables).getOrElse(Array.empty).isEmpty match {
@@ -115,7 +123,7 @@ class GetTablesApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
 
 
     case message: GetFormattedTablesMessage =>
-      Configuration.log4j.info("[GetTablesApiActor]: showing formatted tables for user " + message.userId)
+      Configuration.log4j.info("[GetMetadataApiActor]: showing formatted tables for user " + message.userId)
       val currentSender = sender
 
       val getFormattedTablesFuture = future {
