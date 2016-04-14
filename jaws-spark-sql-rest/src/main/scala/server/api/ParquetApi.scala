@@ -40,7 +40,7 @@ trait ParquetApi extends BaseApi with CORSDirectives {
    * registered as temporary table.
    */
   def initializeParquetTables(userId: String) {
-    Configuration.log4j.info("Initializing parquet tables on the current spark context for user" + userId)
+    Configuration.log4j.info("Initializing parquet tables on the current spark context for user " + userId)
     val parquetTables = dals.parquetTableDal.listParquetTables(userId)
 
     parquetTables.foreach(pTable => {

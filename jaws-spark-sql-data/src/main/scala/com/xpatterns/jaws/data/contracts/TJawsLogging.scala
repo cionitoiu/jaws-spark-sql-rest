@@ -106,7 +106,7 @@ trait TJawsLogging {
 
     if (newQueryName != null) {
       // Save the query name to be able to search it
-      saveQueryName(newQueryName, queryId)
+      saveQueryName(newQueryName, queryId, userId)
 
       // Set the default published value
       val published = metaInfo.published.getOrElse(false)
@@ -138,7 +138,7 @@ trait TJawsLogging {
   def getPublishedQueries(userId: String):Array[String]
   def getQueriesByName(name:String, userId: String):Queries
   def deleteQueryName(name: String, userId: String)
-  def saveQueryName(name: String, queryId: String)
+  def saveQueryName(name: String, queryId: String, userId: String)
 
   def deleteQuery(queryId: String, userId: String)
 }

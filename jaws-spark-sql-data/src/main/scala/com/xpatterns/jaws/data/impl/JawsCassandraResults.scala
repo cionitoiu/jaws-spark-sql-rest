@@ -25,8 +25,8 @@ class JawsCassandraResults(keyspace: Keyspace) extends TJawsResults {
 
   val LEVEL_UUID = 0
   val LEVEL_FORMAT = 1
-  val LEVEL_TYPE = 2
-  val LEVEL_USERID = 3
+  val LEVEL_USERID = 2
+  val LEVEL_TYPE = 3
 
   val FORMAT_AVRO = "avro"
   val FORMAT_CUSTOM = "custom"
@@ -51,14 +51,14 @@ class JawsCassandraResults(keyspace: Keyspace) extends TJawsResults {
       val columnResult = new Composite()
       columnResult.setComponent(LEVEL_UUID, uuid, ss)
       columnResult.setComponent(LEVEL_FORMAT, FORMAT_AVRO, ss)
-      columnResult.setComponent(LEVEL_TYPE, TYPE_RESULT, is)
       columnResult.setComponent(LEVEL_USERID, userId, ss)
+      columnResult.setComponent(LEVEL_TYPE, TYPE_RESULT, is)
 
       val columnSchema = new Composite()
       columnSchema.setComponent(LEVEL_UUID, uuid, ss)
       columnSchema.setComponent(LEVEL_FORMAT, FORMAT_AVRO, ss)
-      columnSchema.setComponent(LEVEL_TYPE, TYPE_SCHEMA, is)
       columnSchema.setComponent(LEVEL_USERID, userId, ss)
+      columnSchema.setComponent(LEVEL_TYPE, TYPE_SCHEMA, is)
 
       val mutator = HFactory.createMutator(keyspace, is)
       mutator.addInsertion(key, CF_SPARK_RESULTS, HFactory.createColumn(columnResult, avroResults.serializeResult(), cs, bs))
@@ -78,14 +78,14 @@ class JawsCassandraResults(keyspace: Keyspace) extends TJawsResults {
 
       schema.addComponent(LEVEL_UUID, uuid, ComponentEquality.EQUAL)
       schema.addComponent(LEVEL_FORMAT, FORMAT_AVRO, ComponentEquality.EQUAL)
-      schema.addComponent(LEVEL_TYPE, TYPE_SCHEMA, ComponentEquality.EQUAL)
       schema.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
+      schema.addComponent(LEVEL_TYPE, TYPE_SCHEMA, ComponentEquality.EQUAL)
 
       val results = new Composite()
       results.addComponent(LEVEL_UUID, uuid, ComponentEquality.EQUAL)
       results.addComponent(LEVEL_FORMAT, FORMAT_AVRO, ComponentEquality.EQUAL)
-      results.addComponent(LEVEL_TYPE, TYPE_RESULT, ComponentEquality.EQUAL)
       results.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
+      results.addComponent(LEVEL_TYPE, TYPE_RESULT, ComponentEquality.EQUAL)
 
       val columnQuery = HFactory.createSliceQuery(keyspace, is, cs, bs)
       columnQuery.setColumnFamily(CF_SPARK_RESULTS).setKey(key).setColumnNames(schema, results)
@@ -101,7 +101,6 @@ class JawsCassandraResults(keyspace: Keyspace) extends TJawsResults {
               Option(columnSlice.getColumns) match {
                 case None => new AvroResult()
                 case _ =>
-
                   columnSlice.getColumns.size match {
                     case 2 =>
                       var sch: Schema = null
@@ -187,14 +186,14 @@ class JawsCassandraResults(keyspace: Keyspace) extends TJawsResults {
       val columnResult = new Composite()
       columnResult.setComponent(LEVEL_UUID, uuid, ss)
       columnResult.setComponent(LEVEL_FORMAT, FORMAT_AVRO, ss)
-      columnResult.setComponent(LEVEL_TYPE, TYPE_RESULT, is)
       columnResult.setComponent(LEVEL_USERID, userId, ss)
+      columnResult.setComponent(LEVEL_TYPE, TYPE_RESULT, is)
 
       val columnSchema = new Composite()
       columnSchema.setComponent(LEVEL_UUID, uuid, ss)
       columnSchema.setComponent(LEVEL_FORMAT, FORMAT_AVRO, ss)
-      columnSchema.setComponent(LEVEL_TYPE, TYPE_SCHEMA, is)
       columnSchema.setComponent(LEVEL_USERID, userId, ss)
+      columnSchema.setComponent(LEVEL_TYPE, TYPE_SCHEMA, is)
 
       val columnCustom = new Composite()
       columnCustom.setComponent(LEVEL_UUID, uuid, ss)

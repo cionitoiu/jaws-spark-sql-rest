@@ -176,9 +176,9 @@ class JawsHdfsLogging(configuration: Configuration) extends TJawsLogging {
     }
   }
 
-  override def saveQueryName(name: String, queryId: String): Unit = {
+  override def saveQueryName(name: String, queryId: String, userId: String): Unit = {
     Utils.TryWithRetry {
-      logger.debug("Saving query name " + name + " to query " + queryId)
+      logger.debug("Saving query name " + name + " to query " + queryId + " for user " + userId)
       Utils.rewriteFile(queryId, configuration, getQueryNameFolderPath(name))
     }
   }

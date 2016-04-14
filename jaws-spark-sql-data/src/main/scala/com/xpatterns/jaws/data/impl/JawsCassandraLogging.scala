@@ -39,9 +39,10 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
   val QUERY_NAME_PUBLISHED_ROW = CF_SPARK_LOGS_NUMBER_OF_ROWS + 2
 
   val LEVEL_TYPE = 0
-  val LEVEL_UUID = 1
-  val LEVEL_TIME_STAMP = 2
-  val LEVEL_USERID = 3
+  val LEVEL_USERID = 1
+  val LEVEL_UUID = 2
+  val LEVEL_TIME_STAMP = 3
+
 
   val TYPE_QUERY_STATE = -1
   val TYPE_SCRIPT_DETAILS = 0
@@ -66,9 +67,9 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
       val key = computeRowKey(queryId + userId)
 
       val column = new Composite()
-      column.setComponent(LEVEL_UUID, queryId, ss)
       column.setComponent(LEVEL_TYPE, TYPE_QUERY_STATE, is)
       column.setComponent(LEVEL_USERID, userId, ss)
+      column.setComponent(LEVEL_UUID, queryId, ss)
 
       val mutator = HFactory.createMutator(keyspace, is)
       mutator.addInsertion(key, CF_SPARK_LOGS, HFactory.createColumn(column, queryState.toString, cs, ss))
@@ -85,8 +86,8 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
       val column = new Composite()
       column.setComponent(LEVEL_TYPE, TYPE_SCRIPT_DETAILS, is)
-      column.setComponent(LEVEL_UUID, queryId, ss)
       column.setComponent(LEVEL_USERID, userId, ss)
+      column.setComponent(LEVEL_UUID, queryId, ss)
 
       val mutator = HFactory.createMutator(keyspace, is)
       mutator.addInsertion(key, CF_SPARK_LOGS, HFactory.createColumn(column, scriptDetails, cs, ss))
@@ -108,9 +109,10 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
       val column = new Composite()
       column.setComponent(LEVEL_TYPE, TYPE_LOG, is)
+      column.setComponent(LEVEL_USERID, userId, ss)
       column.setComponent(LEVEL_UUID, queryId, ss)
       column.setComponent(LEVEL_TIME_STAMP, time, ls)
-      column.setComponent(LEVEL_USERID, userId, ss)
+
 
       val mutator = HFactory.createMutator(keyspace, is)
       mutator.addInsertion(key, CF_SPARK_LOGS, HFactory.createColumn(column, dto.toJson.toString(), cs, StringSerializer.get.asInstanceOf[Serializer[Object]]))
@@ -127,8 +129,8 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
       val column = new Composite()
       column.addComponent(LEVEL_TYPE, TYPE_QUERY_STATE, ComponentEquality.EQUAL)
-      column.addComponent(LEVEL_UUID, queryId, ComponentEquality.EQUAL)
       column.setComponent(LEVEL_USERID, userId, ss)
+      column.addComponent(LEVEL_UUID, queryId, ComponentEquality.EQUAL)
 
       val sliceQuery: SliceQuery[Int, Composite, String] = HFactory.createSliceQuery(keyspace, is, cs, ss)
       sliceQuery.setColumnFamily(CF_SPARK_LOGS).setKey(key).setRange(column, column, false, 1)
@@ -170,8 +172,8 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
       val column = new Composite()
       column.addComponent(LEVEL_TYPE, TYPE_SCRIPT_DETAILS, ComponentEquality.EQUAL)
-      column.addComponent(LEVEL_UUID, queryId, ComponentEquality.EQUAL)
       column.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
+      column.addComponent(LEVEL_UUID, queryId, ComponentEquality.EQUAL)
 
       val sliceQuery: SliceQuery[Int, Composite, String] = HFactory.createSliceQuery(keyspace, is, cs, ss)
       sliceQuery.setColumnFamily(CF_SPARK_LOGS).setKey(key).setRange(column, column, false, 1)
@@ -211,14 +213,14 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
       val startColumn = new Composite()
       startColumn.addComponent(LEVEL_TYPE, TYPE_LOG, ComponentEquality.EQUAL)
+      startColumn.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
       startColumn.addComponent(LEVEL_UUID, queryId, ComponentEquality.EQUAL)
       startColumn.addComponent(LEVEL_TIME_STAMP, time, ComponentEquality.EQUAL)
-      startColumn.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
 
       val endColumn = new Composite()
       endColumn.addComponent(LEVEL_TYPE, TYPE_LOG, ComponentEquality.EQUAL)
-      endColumn.addComponent(LEVEL_UUID, queryId, ComponentEquality.GREATER_THAN_EQUAL)
       endColumn.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
+      endColumn.addComponent(LEVEL_UUID, queryId, ComponentEquality.GREATER_THAN_EQUAL)
       val sliceQuery: SliceQuery[Int, Composite, String] = HFactory.createSliceQuery(keyspace, is, cs, ss)
       sliceQuery.setColumnFamily(CF_SPARK_LOGS).setKey(key).setRange(startColumn, endColumn, false, limit)
 
@@ -274,13 +276,14 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
         startColumn.addComponent(LEVEL_UUID, queryId, ComponentEquality.EQUAL)
       }
 
+
       val endColumn = new Composite()
-      endColumn.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
       if (queryId != null && !queryId.isEmpty) {
         endColumn.addComponent(LEVEL_TYPE, TYPE_QUERY_STATE, ComponentEquality.LESS_THAN_EQUAL)
       } else {
         endColumn.addComponent(LEVEL_TYPE, TYPE_QUERY_STATE, ComponentEquality.GREATER_THAN_EQUAL)
       }
+      startColumn.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
 
       val multiSliceQuery: MultigetSliceQuery[Integer, Composite, String] = HFactory.createMultigetSliceQuery(keyspace, ints, cs, ss)
       if (queryId != null && !queryId.isEmpty) {
@@ -350,8 +353,8 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
       val column = new Composite()
       column.addComponent(LEVEL_TYPE, TYPE_QUERY_NAME, ComponentEquality.EQUAL)
-      column.addComponent(LEVEL_UUID, name, ComponentEquality.EQUAL)
       column.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
+      column.addComponent(LEVEL_UUID, name, ComponentEquality.EQUAL)
 
       val columnQuery = HFactory.createColumnQuery(keyspace, is, cs, ss)
       columnQuery.setColumnFamily(CF_SPARK_LOGS).setKey(key).setName(column)
@@ -378,8 +381,8 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
       val column = new Composite()
       column.setComponent(LEVEL_TYPE, TYPE_META, is)
-      column.setComponent(LEVEL_UUID, queryId, ss)
       column.setComponent(LEVEL_USERID, userId, ss)
+      column.setComponent(LEVEL_UUID, queryId, ss)
 
       val value = metainfo.toJson.toString()
 
@@ -399,8 +402,8 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
       val column = new Composite()
       column.addComponent(LEVEL_TYPE, TYPE_META, ComponentEquality.EQUAL)
-      column.addComponent(LEVEL_UUID, queryId, ComponentEquality.EQUAL)
       column.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
+      column.addComponent(LEVEL_UUID, queryId, ComponentEquality.EQUAL)
 
       val columnQuery = HFactory.createColumnQuery(keyspace, is, cs, ss)
       columnQuery.setColumnFamily(CF_SPARK_LOGS).setKey(key).setName(column)
@@ -421,14 +424,15 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
     }
   }
 
-  override def saveQueryName(name: String, queryId: String): Unit = {
+  override def saveQueryName(name: String, queryId: String, userId: String): Unit = {
     Utils.TryWithRetry {
-      logger.debug("Saving query name " + name + " to query " + queryId)
+      logger.debug("Saving query name " + name + " to query " + queryId + " for user " + userId)
 
       val key = computeRowKey(name)
 
       val column = new Composite()
       column.setComponent(LEVEL_TYPE, TYPE_QUERY_NAME, is)
+      column.setComponent(LEVEL_USERID, userId, ss)
       column.setComponent(LEVEL_UUID, name, ss)
 
       val value = queryId
@@ -452,8 +456,8 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
       val column = new Composite()
       column.setComponent(LEVEL_TYPE, TYPE_QUERY_NAME, is)
-      column.setComponent(LEVEL_UUID, name, ss)
       column.setComponent(LEVEL_USERID, userId, ss)
+      column.setComponent(LEVEL_UUID, name, ss)
 
       val mutator = HFactory.createMutator(keyspace, is)
       mutator.addDeletion(key, CF_SPARK_LOGS, column, cs)
@@ -504,24 +508,22 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
     }
 
     Utils.TryWithRetry {
-      logger.info(s"Updating published status of $name to $published")
+      logger.info(s"Updating published status of $name to $published for user $userId")
 
       val mutator = HFactory.createMutator(keyspace, is)
 
       // Delete the old entry for query
       deleteQueryPublishedStatus(name, metaInfo.published, userId)
 
-      if (published) {
-        val column = new Composite()
-        column.setComponent(LEVEL_TYPE, TYPE_QUERY_PUBLISHED_STATE, is)
-        column.setComponent(LEVEL_UUID, name, ss)
-        mutator.addInsertion(QUERY_NAME_PUBLISHED_ROW, CF_SPARK_LOGS, HFactory.createColumn(column, "", cs, ss))
-      } else {
-        val column = new Composite()
-        column.setComponent(LEVEL_TYPE, TYPE_QUERY_PUBLISHED_STATE, is)
-        column.setComponent(LEVEL_UUID, name, ss)
-        mutator.addInsertion(QUERY_NAME_UNPUBLISHED_ROW, CF_SPARK_LOGS, HFactory.createColumn(column, "", cs, ss))
+      val column = new Composite()
+      column.setComponent(LEVEL_TYPE, TYPE_QUERY_PUBLISHED_STATE, is)
+      column.setComponent(LEVEL_USERID, userId, ss)
+      column.setComponent(LEVEL_UUID, name, ss)
+      var status = QUERY_NAME_PUBLISHED_ROW
+      if (!published) {
+        status = QUERY_NAME_UNPUBLISHED_ROW
       }
+      mutator.addInsertion(status, CF_SPARK_LOGS, HFactory.createColumn(column, "", cs, ss))
 
       mutator.execute()
     }
@@ -529,21 +531,19 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
   def deleteQueryPublishedStatus(name: String, published:Option[Boolean], userId: String): Unit = {
     Utils.TryWithRetry {
-      logger.info(s"Deleting query published status of $name")
+      logger.info(s"Deleting query published status of $name for user $userId")
 
       val mutator = HFactory.createMutator(keyspace, is)
 
+      val column = new Composite()
+      column.setComponent(LEVEL_TYPE, TYPE_QUERY_PUBLISHED_STATE, is)
+      column.setComponent(LEVEL_USERID, userId, ss)
+      column.setComponent(LEVEL_UUID, name, ss)
+      var status = QUERY_NAME_PUBLISHED_ROW
       if (published.isEmpty || !published.get) {
-        val column = new Composite()
-        column.setComponent(LEVEL_TYPE, TYPE_QUERY_PUBLISHED_STATE, is)
-        column.setComponent(LEVEL_UUID, name, ss)
-        mutator.addDeletion(QUERY_NAME_UNPUBLISHED_ROW, CF_SPARK_LOGS, column, cs)
-      } else {
-        val column = new Composite()
-        column.setComponent(LEVEL_TYPE, TYPE_QUERY_PUBLISHED_STATE, is)
-        column.setComponent(LEVEL_UUID, name, ss)
-        mutator.addDeletion(QUERY_NAME_PUBLISHED_ROW, CF_SPARK_LOGS, column, cs)
+        status = QUERY_NAME_UNPUBLISHED_ROW
       }
+      mutator.addDeletion(status, CF_SPARK_LOGS, column, cs)
       mutator.execute()
     }
   }
@@ -556,16 +556,13 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
 
       logger.debug(s"Deleting query state for $queryId and user $userId")
       val column = new Composite()
-      column.setComponent(LEVEL_UUID, queryId, ss)
       column.setComponent(LEVEL_TYPE, TYPE_QUERY_STATE, is)
       column.setComponent(LEVEL_USERID, userId, ss)
+      column.setComponent(LEVEL_UUID, queryId, ss)
       mutator.addDeletion(key, CF_SPARK_LOGS, column, cs)
 
       logger.debug(s"Deleting query details for $queryId and user $userId")
-      //val columnScriptDetails = new Composite()
       column.setComponent(LEVEL_TYPE, TYPE_SCRIPT_DETAILS, is)
-      //columnScriptDetails.setComponent(LEVEL_UUID, queryId, ss)
-      //columnScriptDetails.setComponent(LEVEL_USERID, userId, ss)
       mutator.addDeletion(key, CF_SPARK_LOGS, column, cs)
 
       val metaInfo = getMetaInfo(queryId, userId)
@@ -579,21 +576,15 @@ class JawsCassandraLogging(keyspace: Keyspace) extends TJawsLogging {
       }
 
       logger.debug(s"Deleting meta info for $queryId and user $userId")
-      //val columnMetaInfo = new Composite()
       column.setComponent(LEVEL_TYPE, TYPE_META, is)
-      //columnMetaInfo.setComponent(LEVEL_UUID, queryId, ss)
-      //columnMetaInfo.setComponent(LEVEL_USERID, userId, ss)
       mutator.addDeletion(key, CF_SPARK_LOGS, column, cs)
 
       logger.debug(s"Deleting query logs for $queryId and user $userId")
       var logs = getLogs(queryId, 0, 100, userId)
       while (logs.logs.nonEmpty) {
         logs.logs.foreach(log => {
-          //val columnLogs = new Composite()
           column.setComponent(LEVEL_TYPE, TYPE_LOG, is)
-          //columnLogs.setComponent(LEVEL_UUID, queryId, ss)
           column.setComponent(LEVEL_TIME_STAMP, log.timestamp, ls)
-          //columnLogs.setComponent(LEVEL_USERID, userId, ss)
           mutator.addDeletion(key, CF_SPARK_LOGS, column, cs)
         })
         mutator.execute()

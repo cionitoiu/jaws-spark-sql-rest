@@ -3,9 +3,6 @@ package server
 import akka.actor.{ Actor, ActorLogging }
 import scala.collection._
 import org.java_websocket.WebSocket
-import server.ReactiveServer.Close
-import server.ReactiveServer.Error
-import server.ReactiveServer.Open
 import akka.actor.actorRef2Scala
 
 /**

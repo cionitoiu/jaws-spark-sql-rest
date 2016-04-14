@@ -24,8 +24,8 @@ class JawsCassandraParquetTables(keyspace: Keyspace) extends TJawsParquetTables 
   val PARQUET_TABLES_ROW = CF_SPARK_LOGS_NUMBER_OF_ROWS + 1
   val ROW_ID = "tables"
 
-  val LEVEL_NAME = 0
-  val LEVEL_USERID = 1
+  val LEVEL_USERID = 0
+  val LEVEL_NAME = 1
 
   val is = IntegerSerializer.get.asInstanceOf[Serializer[Int]]
   val ints = IntegerSerializer.get.asInstanceOf[Serializer[Integer]]
@@ -37,11 +37,12 @@ class JawsCassandraParquetTables(keyspace: Keyspace) extends TJawsParquetTables 
   override def addParquetTable(pTable: ParquetTable, userId: String) {
     Utils.TryWithRetry {
       logger.debug(s"Adding the parquet table ${pTable.name} for the filepath ${pTable.filePath} for user $userId")
+
       val key = computeRowKey(pTable.name + userId)
 
       val column = new Composite()
-      column.setComponent(LEVEL_NAME, pTable.name, ss)
       column.setComponent(LEVEL_USERID, userId, ss)
+      column.setComponent(LEVEL_NAME, pTable.name, ss)
 
       val mutator = HFactory.createMutator(keyspace, is)
       val valueTouple = (pTable.namenode, pTable.filePath).toJson.prettyPrint
@@ -53,10 +54,12 @@ class JawsCassandraParquetTables(keyspace: Keyspace) extends TJawsParquetTables 
   override def deleteParquetTable(name: String, userId: String) {
     Utils.TryWithRetry {
       logger.debug(s"Deleting parquet table $name for user $userId")
+
       val key = computeRowKey(name + userId)
+
       val column = new Composite()
-      column.setComponent(LEVEL_NAME, name, ss)
       column.setComponent(LEVEL_USERID, userId, ss)
+      column.setComponent(LEVEL_NAME, name, ss)
       val mutator = HFactory.createMutator(keyspace, is)
 
       mutator.addDeletion(key, CF_PARQUET_TABLES, column, cs)
@@ -112,10 +115,14 @@ class JawsCassandraParquetTables(keyspace: Keyspace) extends TJawsParquetTables 
   override def tableExists(name: String, userId: String): Boolean = {
     Utils.TryWithRetry {
       logger.debug(s"Reading the parquet table $name for user $userId")
+
       val key = computeRowKey(name + userId)
+
       val column = new Composite()
-      column.addComponent(LEVEL_NAME, name, ComponentEquality.EQUAL)
       column.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
+      column.addComponent(LEVEL_NAME, name, ComponentEquality.EQUAL)
+
+
       val columnQuery = HFactory.createColumnQuery(keyspace, is, cs, ss)
       columnQuery.setColumnFamily(CF_PARQUET_TABLES).setKey(key).setName(column)
 
@@ -135,10 +142,13 @@ class JawsCassandraParquetTables(keyspace: Keyspace) extends TJawsParquetTables 
   override def readParquetTable(name: String, userId: String): ParquetTable = {
     Utils.TryWithRetry {
       logger.debug(s"Reading the parquet table $name for user $userId")
+
       val key = computeRowKey(name + userId)
+
       val column = new Composite()
-      column.addComponent(LEVEL_NAME, name, ComponentEquality.EQUAL)
       column.addComponent(LEVEL_USERID, userId, ComponentEquality.EQUAL)
+      column.addComponent(LEVEL_NAME, name, ComponentEquality.EQUAL)
+
       val columnQuery = HFactory.createColumnQuery(keyspace, is, cs, ss)
       columnQuery.setColumnFamily(CF_PARQUET_TABLES).setKey(key).setName(column)
 

@@ -1,18 +1,17 @@
 create keyspace xpatterns_jaws_xt
     with strategy_options={replication_factor:1}
-    and placement_strategy = 'NetworkTopologyStrategy'
-    and strategy_options = {DC1:2,DC2:2};
+    and placement_strategy = 'org.apache.cassandra.locator.SimpleStrategy';
 
 use xpatterns_jaws_xt;
 
 create column family logs
-with comparator = 'CompositeType(Int32Type,UTF8Type,LongType,UTF8Type)'
+with comparator = 'CompositeType(Int32Type,UTF8Type,UTF8Type,LongType)'
 AND key_validation_class = 'Int32Type'
 AND default_validation_class = 'BytesType';
 
 
 create column family results
-with comparator = 'CompositeType(UTF8Type,UTF8Type,Int32Type,UTF8Type)'
+with comparator = 'CompositeType(UTF8Type,UTF8Type,UTF8Type,Int32Type)'
 AND key_validation_class = 'Int32Type'
 AND default_validation_class = 'BytesType';
 
