@@ -7,10 +7,10 @@ import server.Configuration
 import messages.CancelMessage
 import server.JawsController
 import apiactors.ActorsPaths._
-import messages.RegisterTableMessage
+import messages.RegisterParquetTableMessage
 import akka.pattern._
 import akka.util.Timeout
-import messages.UnregisterTableMessage
+import messages.UnregisterParquetTableMessage
 
 class BalancerActor extends Actor {
   var runActors: Array[ActorSelection] = null
@@ -25,13 +25,13 @@ class BalancerActor extends Actor {
 
   def receive = {
     case message: CancelMessage =>
-      JawsController.runScriptActor ! message
+      JawsController./*runScript*/hiveActor ! message
       Option(runActors) match {
         case None => Configuration.log4j.info("[BalancerActor] There aren't any remote run actors to send the cancel message to!")
         case _ => runActors.foreach { dom => dom ! message }
       }
 
-    case message @ (_: RegisterTableMessage | _: UnregisterTableMessage) => {
+    case message @ (_: RegisterParquetTableMessage | _: UnregisterParquetTableMessage) => {
       Option(registerParquetTableActors) match {
         case None => Configuration.log4j.info("[BalancerActor] There aren't any remote register parquet actors to send the register table message to!")
         case _ => registerParquetTableActors.foreach { dom =>
@@ -42,7 +42,7 @@ class BalancerActor extends Actor {
         }
       }
 
-      sender ! JawsController.registerParquetTableActor ? message
+      sender ! JawsController./*registerParquetTable*/hiveActor ? message
     }
 
   }

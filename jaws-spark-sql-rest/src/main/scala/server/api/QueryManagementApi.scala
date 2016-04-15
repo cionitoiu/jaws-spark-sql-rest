@@ -26,7 +26,7 @@ import customs.CustomDirectives._
  */
 trait QueryManagementApi extends BaseApi with CORSDirectives {
   // Actor used for getting results for a query
-  lazy val getResultsActor = createActor(Props(new GetResultsApiActor(hiveContext, dals)), GET_RESULTS_ACTOR_NAME, localSupervisor)
+  //lazy val getResultsActor = createActor(Props(new GetResultsApiActor(hiveContext, dals)), GET_RESULTS_ACTOR_NAME, localSupervisor)
 
   // Actor used for getting logs for a query
   lazy val getLogsActor = createActor(Props(new GetLogsApiActor(dals)), GET_LOGS_ACTOR_NAME, localSupervisor)
@@ -84,7 +84,8 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
                 validateCondition(query != null && !query.trim.isEmpty, Configuration.SCRIPT_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
                   respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
                     Configuration.log4j.info(s"The query is limited=$limited and the destination is $destination")
-                    val future = ask(runScriptActor, RunScriptMessage(query, limited, numberOfResults, destination.toLowerCase, userId))
+                    val future = ask(/*runScript*/hiveActor, RunScriptMessage(query, limited, numberOfResults,
+                                                                      destination.toLowerCase, userId, hdfsConf))
                     future.map {
                       case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
                       case result: String => ctx.complete(StatusCodes.OK, result)
@@ -100,7 +101,7 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
               validateCondition(queryName != null && !queryName.trim.isEmpty, Configuration.QUERY_NAME_MESSAGE, StatusCodes.BadRequest) {
                 respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
                   Configuration.log4j.info(s"Running the query with name $queryName")
-                  val future = ask(runScriptActor, RunQueryMessage(queryName.trim, userId))
+                  val future = ask(/*runScript*/hiveActor, RunQueryMessage(queryName.trim, userId, hdfsConf))
                   future.map {
                     case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
                     case result: String => ctx.complete(StatusCodes.OK, result)
@@ -202,7 +203,7 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
                   value ⇒ customGson.toJson(value)
                 }
 
-                val future = ask(getResultsActor, GetResultsMessage(queryID, offset, limit, format.toLowerCase, userId, hdfsConf))
+                val future = ask(/*getResults*/hiveActor, GetResultsMessage(queryID, offset, limit, format.toLowerCase, userId, hdfsConf))
                 future.map {
                   case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
                   case result: Any => ctx.complete(StatusCodes.OK, result)
@@ -420,13 +421,15 @@ trait QueryManagementApi extends BaseApi with CORSDirectives {
    */
   private def cancelRoute = path("cancel") {
     post {
-      parameters('queryID.as[String]) { queryID =>
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-          complete {
-            balancerActor ! CancelMessage(queryID)
+      securityFilter { userId =>
+        parameters('queryID.as[String]) { queryID =>
+          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+            complete {
+              balancerActor ! CancelMessage(queryID, userId)
 
-            Configuration.log4j.info("Cancel message was sent")
-            "Cancel message was sent"
+              Configuration.log4j.info("Cancel message was sent")
+              "Cancel message was sent"
+            }
           }
         }
       }

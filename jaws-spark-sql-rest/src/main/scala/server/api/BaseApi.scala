@@ -19,17 +19,18 @@ trait BaseApi extends SecurityApi {
   implicit val timeout = Timeout(Configuration.timeout.toInt, TimeUnit.MILLISECONDS)
 
   // The hdfs configuration that is initialized when the server starts
-  var hdfsConf: org.apache.hadoop.conf.Configuration = _
+  //var hdfsConf: org.apache.hadoop.conf.Configuration = _
 
   // The hive context that is initialized when the server starts
-  var hiveContext: HiveContextWrapper = _
+  //var hiveContext: HiveContextWrapper = _
 
-  // Holds the DAL. It is initialized when the server starts
-  var dals: DAL = _
+
 
   // The actor that is handling the scripts that are run on Hive or Spark SQL. This field is lazy because the hdfs
   // configuration and the hive context are not initialized at the moment of creating the object.
-  lazy val runScriptActor = createActor(Props(new RunScriptApiActor(hdfsConf, hiveContext, dals)), RUN_SCRIPT_ACTOR_NAME, remoteSupervisor)
+  //lazy val runScriptActor = createActor(Props(new RunScriptApiActor(hiveContext, dals)), RUN_SCRIPT_ACTOR_NAME, remoteSupervisor)
+
+
 
   // The actor that is handling the parquet tables
   lazy val balancerActor = createActor(Props(classOf[BalancerActor]), BALANCER_ACTOR_NAME, remoteSupervisor)

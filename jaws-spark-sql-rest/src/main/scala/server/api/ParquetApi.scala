@@ -29,11 +29,11 @@ import customs.CustomDirectives._
  */
 trait ParquetApi extends BaseApi with CORSDirectives {
   // Handles the parquet tables operations
-  lazy val getParquetTablesActor: ActorRef = createActor(Props(new GetParquetTablesApiActor(hiveContext, dals)),
-    GET_PARQUET_TABLES_ACTOR_NAME, localSupervisor)
+  //lazy val getParquetTablesActor: ActorRef = createActor(Props(new GetParquetTablesApiActor(hiveContext, dals)),
+   // GET_PARQUET_TABLES_ACTOR_NAME, localSupervisor)
 
   // Handles the registering of parquet tables
-  lazy val registerParquetTableActor = createActor(Props(new RegisterParquetTableApiActor(hiveContext, dals)), REGISTER_PARQUET_TABLE_ACTOR_NAME, remoteSupervisor)
+  //lazy val registerParquetTableActor = createActor(Props(new RegisterParquetTableApiActor(hiveContext, dals)), REGISTER_PARQUET_TABLE_ACTOR_NAME, remoteSupervisor)
 
   /**
    * Initialize the parquet tables. Each time the server is started the parquet files, that are used as tables, are
@@ -48,7 +48,7 @@ trait ParquetApi extends BaseApi with CORSDirectives {
       newConf.set("fs.defaultFS", pTable.namenode)
       if (Utils.checkFileExistence(pTable.filePath, newConf)) {
         // Send message to register the parquet table
-        val future = ask(registerParquetTableActor, RegisterTableMessage(pTable.name, pTable.filePath, pTable.namenode, userId))
+        val future = ask(/*registerParquetTable*/hiveActor, RegisterParquetTableMessage(pTable.name, pTable.filePath, pTable.namenode, userId))
 
         // When registering is complete display the proper message or in case of failure delete the table.
         Await.ready(future, Inf).value.get match {
@@ -114,9 +114,9 @@ trait ParquetApi extends BaseApi with CORSDirectives {
                           Configuration.TABLE_ALREADY_EXISTS_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
                           respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
                             Configuration.log4j.info(s"The tablePath is $tablePath on namenode $pathType and the table name is $table")
-                            val future = ask(runScriptActor,
+                            val future = ask(/*runScript*/hiveActor,
                                              RunParquetMessage(query, tablePath, getNamenodeFromPathType(pathType),
-                                                               table, limited, numberOfResults, destination, userId))
+                                                               table, limited, numberOfResults, destination, userId, hdfsConf))
                             future.map {
                               case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
                               case result: String => ctx.complete(StatusCodes.OK, result)
@@ -203,7 +203,7 @@ trait ParquetApi extends BaseApi with CORSDirectives {
                     respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
                       Configuration.log4j.info(s"Registering table $name having the path $path on node $pathType")
 
-                      val future = ask(balancerActor, RegisterTableMessage(name, path, getNamenodeFromPathType(pathType), userId))
+                      val future = ask(balancerActor, RegisterParquetTableMessage(name, path, getNamenodeFromPathType(pathType), userId))
                         .map(innerFuture => innerFuture.asInstanceOf[Future[Any]])
                         .flatMap(identity)
                       future.map {
@@ -249,7 +249,7 @@ trait ParquetApi extends BaseApi with CORSDirectives {
               case (key, value) => Configuration.log4j.warn(s"Unknown parameter $key!")
             }
             Configuration.log4j.info(s"Retrieving table information for parquet tables= $tables")
-            val future = ask(getParquetTablesActor, new GetParquetTablesMessage(tables.toArray, describe, userId))
+            val future = ask(/*getParquetTables*/hiveActor, new GetParquetTablesMessage(tables.toArray, describe, userId))
 
             future.map {
               case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
@@ -278,7 +278,7 @@ trait ParquetApi extends BaseApi with CORSDirectives {
             validateCondition(name != null && !name.trim.isEmpty, Configuration.TABLE_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
               respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
                 Configuration.log4j.info(s"Unregistering table $name ")
-                val future = ask(balancerActor, UnregisterTableMessage(name, userId))
+                val future = ask(balancerActor, UnregisterParquetTableMessage(name, userId))
                   .map(innerFuture => innerFuture.asInstanceOf[Future[Any]])
                   .flatMap(identity)
                 future.map {

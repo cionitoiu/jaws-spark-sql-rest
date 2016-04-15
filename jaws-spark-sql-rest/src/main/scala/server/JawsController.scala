@@ -1,9 +1,10 @@
 package server
 
 import java.net.InetAddress
+import org.apache.hadoop.security.UserGroupInformation
 import server.api._
 import scala.collection.JavaConverters._
-import com.typesafe.config.Config
+import com.typesafe.config.{ConfigFactory, Config}
 import com.xpatterns.jaws.data.utils.Utils
 import akka.actor.ActorSystem
 import customs.CORSDirectives
@@ -11,12 +12,15 @@ import com.xpatterns.jaws.data.impl.CassandraDal
 import com.xpatterns.jaws.data.impl.HdfsDal
 import spray.routing.Directive.pimpApply
 import spray.routing.SimpleRoutingApp
+import org.apache.hadoop.security.UserGroupInformation
 import com.xpatterns.jaws.data.contracts.DAL
 import org.apache.spark.sql.hive.HiveUtils
 import implementation.HiveContextWrapper
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.LoggingListener
 import org.apache.spark.SparkConf
+
+import scala.sys.SystemProperties
 
 /**
  * Created by emaorhian
@@ -26,7 +30,7 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
   initialize()
 
   // initialize parquet tables
-  initializeParquetTables("tempUser") ///ChangeMe!
+  //initializeParquetTables("tempUser") ///ChangeMe!?????
 
   implicit val spraySystem: ActorSystem = ActorSystem("spraySystem")
 
@@ -55,10 +59,17 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
       case _           => dals = new HdfsDal(hdfsConf)
     }
 
-    hiveContext = createHiveContext(dals)
+    //Kerberos settings and inits
+    val conf = ConfigFactory.load
+    val kerberosConf = conf.getConfig("kerberosConf").withFallback(conf)
+    System.setProperty("java.security.krb5.realm", kerberosConf.getString("kerberos.realm"))
+    System.setProperty("java.security.krb5.kdc", kerberosConf.getString("kerberos.ip"))
+    realUgi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(kerberosConf.getString("principal.id"),
+                                                                   kerberosConf.getString("keytabfile.path")) ;
+    //hiveContext = createHiveContext(dals)
   }
 
-  def createHiveContext(dal: DAL): HiveContextWrapper = {
+  /*def createHiveContext(dal: DAL): HiveContextWrapper = {
     val jars = Configuration.jarPath.get.split(",")
 
     def configToSparkConf(config: Config, contextName: String, jars: Array[String]): SparkConf = {
@@ -76,17 +87,16 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
     val hContext: HiveContextWrapper = {
       val sparkConf = configToSparkConf(Configuration.sparkConf, Configuration.applicationName.getOrElse("Jaws"), jars)
       val sContext = new SparkContext(sparkConf)
+      sContext.addSparkListener(new LoggingListener(dal, "tempUser"))
 
       val hContext = new HiveContextWrapper(sContext)
-      hContext.sparkContext.addSparkListener(new LoggingListener(dal, "tempUser"))
-
       HiveUtils.setSharkProperties(hContext, this.getClass.getClassLoader.getResourceAsStream("sharkSettings.txt"))
       //make sure that lazy variable hiveConf gets initialized
       hContext.runMetadataSql("use default")
       hContext
     }
     hContext
-  }
+  }*/
 
   def getHadoopConf: org.apache.hadoop.conf.Configuration = {
     val configuration = new org.apache.hadoop.conf.Configuration()

@@ -1,27 +1,34 @@
 package server.api
 
-import implementation.HiveContextWrapper
-import org.apache.spark.SparkContext
+import akka.actor.Props
+import apiactors.ActorsPaths._
+import apiactors.HiveUserImpersonationActor
+import com.xpatterns.jaws.data.contracts.DAL
 import server.Configuration
+import server.MainActors._
 import spray.http._
 import spray.routing._
 import authentikat.jwt._
 import com.nimbusds.jose._
 import org.apache.commons.codec.binary.Base64.encodeBase64URLSafeString
 import org.apache.commons.codec.binary.Base64.decodeBase64
+import org.apache.hadoop.security.UserGroupInformation
 
 /**
   * Created by cristianionitoiu on 31/03/16.
   */
 
 trait SecurityApi extends HttpService {
+  // The hdfs configuration that is initialized when the server starts
+  var hdfsConf: org.apache.hadoop.conf.Configuration = _
 
-  // The hive context that is initialized when a new user invokes JAWS
-  //val hiveEnvironment: Map[String, HiveContextWrapper] = Map()
-  //var hiveContext: HiveContextWrapper = _
-  // The spark context that is initialized when the server starts
-  //var sparkContext: SparkContext = _
+  // Holds the DAL. It is initialized when the server starts
+  var dals: DAL = _
 
+  //Holds Jaws user group information initialized at server start-up
+  var realUgi : UserGroupInformation = _
+
+  lazy val hiveActor = createActor(Props(new HiveUserImpersonationActor(realUgi, dals, hdfsConf)), HIVE_ACTOR_NAME, remoteSupervisor)
 
   def securityFilter: Directive1[String] = {
     optionalHeaderValueByName("Authorization").flatMap {
@@ -35,7 +42,7 @@ trait SecurityApi extends HttpService {
 
             //extract user id
             Option(jwtParts.getPayload.toJSONObject.get("sub").toString) match {
-              case Some(value) => provide(value)
+              case Some(userId) => provide(userId)
               case None => complete("Incomplete authorization!") //Client.Error
             }
           } else {

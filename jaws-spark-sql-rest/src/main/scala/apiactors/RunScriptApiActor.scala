@@ -16,11 +16,10 @@ import apiactors.ActorOperations._
 import org.apache.spark.scheduler.RunParquetScriptTask
 import org.apache.spark.sql.hive.HiveUtils
 import com.xpatterns.jaws.data.utils.QueryState
-import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 /**
  * Created by emaorhian
  */
-class RunScriptApiActor(hdfsConf: HadoopConfiguration, hiveContext: HiveContextWrapper, dals: DAL) extends Actor {
+class RunScriptApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Actor {
   var taskCache: Cache[String, RunScriptTask] = _
   var threadPool: ThreadPoolTaskExecutor = _
  
@@ -49,7 +48,7 @@ class RunScriptApiActor(hdfsConf: HadoopConfiguration, hiveContext: HiveContextW
         Configuration.log4j.info("[RunScriptApiActor -run]: The script will be executed with the limited flag set on "
                                   + message.limited + ". The maximum number of results is " + message.maxNumberOfResults)
 
-        val task = new RunScriptTask(dals, hiveContext, uuid, hdfsConf, message)
+        val task = new RunScriptTask(dals, hiveContext, uuid, message.hdfsConf, message)
         taskCache.put(uuid, task)
         writeLaunchStatus(uuid, message.script, message.userId)
         threadPool.execute(task)
@@ -77,13 +76,13 @@ class RunScriptApiActor(hdfsConf: HadoopConfiguration, hiveContext: HiveContextW
           query.metaInfo.published, overwrite = true, message.userId)
 
         val runScript = RunScriptMessage(query.query, query.metaInfo.isLimited, query.metaInfo.maxNrOfResults,
-          query.metaInfo.resultsDestination.toString, message.userId)
+          query.metaInfo.resultsDestination.toString, message.userId, message.hdfsConf)
         Configuration.log4j.info("[RunScriptApiActor -run]: running the following query: " + queryName)
         Configuration.log4j.info("[RunScriptApiActor -run]: running the following script: " + runScript.script)
         Configuration.log4j.info("[RunScriptApiActor -run]: The script will be executed with the limited flag set on "
                                  + runScript.limited + ". The maximum number of results is " + runScript.maxNumberOfResults)
 
-        val task = new RunScriptTask(dals, hiveContext, uuid, hdfsConf, runScript)
+        val task = new RunScriptTask(dals, hiveContext, uuid, message.hdfsConf, runScript)
         taskCache.put(uuid, task)
         writeLaunchStatus(uuid, query.query, message.userId)
         threadPool.execute(task)
@@ -99,7 +98,7 @@ class RunScriptApiActor(hdfsConf: HadoopConfiguration, hiveContext: HiveContextW
         Configuration.log4j.info(s"[RunScriptApiActor -runParquet]: The script will be executed over " +
                                  s"the ${message.tablePath} file with the ${message.table} table name")
      
-        val task = new RunParquetScriptTask(dals, hiveContext, uuid, hdfsConf, message)
+        val task = new RunParquetScriptTask(dals, hiveContext, uuid, message.hdfsConf, message)
         taskCache.put(uuid, task)
         writeLaunchStatus(uuid, message.script, message.userId)
         threadPool.execute(task)
@@ -107,7 +106,8 @@ class RunScriptApiActor(hdfsConf: HadoopConfiguration, hiveContext: HiveContextW
       returnResult(tryRunParquet, uuid, "run parquet query failed with the following message: ", sender())
 
     case message: CancelMessage =>
-      Configuration.log4j.info("[RunScriptApiActor]: Canceling the jobs for the following uuid: " + message.queryID)
+      Configuration.log4j.info("[RunScriptApiActor]: Canceling the jobs for the following uuid: " + message.queryID +
+                               " for user " + message.userId)
 
       val task = taskCache.getIfPresent(message.queryID)
 

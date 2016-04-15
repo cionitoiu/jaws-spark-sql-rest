@@ -11,7 +11,7 @@ import com.xpatterns.jaws.data.utils.QueryState
 import implementation.HiveContextWrapper
 import com.xpatterns.jaws.data.DTO.QueryMetaInfo
 import akka.pattern.ask
-import messages.RegisterTableMessage
+import messages.RegisterParquetTableMessage
 import akka.util.Timeout
 import scala.util.Failure
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -130,11 +130,11 @@ class RunParquetScriptTask(dals: DAL, hiveContext: HiveContextWrapper,
                            runMessage: RunParquetMessage, isCanceled: Boolean = false)
   extends RunScriptTask(dals, hiveContext, uuid, hdfsConf,
                         new RunScriptMessage(runMessage.script, runMessage.limited, runMessage.maxNumberOfResults,
-                                             runMessage.rddDestination, runMessage.userId), isCanceled) {
+                                             runMessage.rddDestination, runMessage.userId, hdfsConf), isCanceled) {
   override def run() {
     implicit val timeout = Timeout(Configuration.timeout, TimeUnit.MILLISECONDS)
     val future = ask(JawsController.balancerActor,
-                     RegisterTableMessage(runMessage.table, runMessage.tablePath, runMessage.namenode, runMessage.userId))
+                     RegisterParquetTableMessage(runMessage.table, runMessage.tablePath, runMessage.namenode, runMessage.userId))
       .map(innerFuture => innerFuture.asInstanceOf[Future[Any]])
       .flatMap(identity)
 

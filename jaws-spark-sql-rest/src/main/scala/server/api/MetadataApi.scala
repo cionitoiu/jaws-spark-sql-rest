@@ -25,10 +25,10 @@ import scala.collection.mutable.ArrayBuffer
  */
 trait MetadataApi extends BaseApi with CORSDirectives {
   // Actor used for getting metadata about the tables
-  lazy val getMetadataActor = createActor(Props(new GetMetadataApiActor(hiveContext, dals)), GET_TABLES_ACTOR_NAME, localSupervisor)
+  //lazy val getMetadataActor = createActor(Props(new GetMetadataApiActor(hiveContext, dals)), GET_TABLES_ACTOR_NAME, localSupervisor)
 
   // Actor used for getting information about the schema
-  lazy val getDatasourceSchemaActor = createActor(Props(new GetDatasourceSchemaActor(hiveContext)), GET_DATASOURCE_SCHEMA_ACTOR_NAME, localSupervisor)
+  //lazy val getDatasourceSchemaActor = createActor(Props(new GetDatasourceSchemaActor(hiveContext)), GET_DATASOURCE_SCHEMA_ACTOR_NAME, localSupervisor)
 
   /**
    * Manages the calls used for getting the metadata about tables, databases and its schema. It handles the following
@@ -52,7 +52,7 @@ trait MetadataApi extends BaseApi with CORSDirectives {
       securityFilter { userId =>
         corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
           respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-            val future = ask(getMetadataActor, GetDatabasesMessage(userId))
+            val future = ask(/*getMetadataActor*/hiveActor, GetDatabasesMessage(userId))
             future.map {
               case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
               case result: Databases => ctx.complete(StatusCodes.OK, result)
@@ -115,7 +115,7 @@ trait MetadataApi extends BaseApi with CORSDirectives {
               val (database, describe, tables) = getTablesParameters(params)
 
               Configuration.log4j.info(s"Retrieving table information for database=$database, tables= $tables, with describe flag set on: $describe")
-              val future = ask(getMetadataActor, new GetTablesMessage(database, describe, tables, userId))
+              val future = ask(/*getMetadata*/hiveActor, new GetTablesMessage(database, describe, tables, userId))
 
               future.map {
                 case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
@@ -160,7 +160,7 @@ trait MetadataApi extends BaseApi with CORSDirectives {
                 ctx =>
 
                   Configuration.log4j.info(s"Retrieving extended table information for database=$database, tables= $tables")
-                  val future = ask(getMetadataActor, new GetExtendedTablesMessage(database, tables, userId))
+                  val future = ask(/*getMetadata*/hiveActor, new GetExtendedTablesMessage(database, tables, userId))
 
                   future.map {
                     case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
@@ -207,7 +207,7 @@ trait MetadataApi extends BaseApi with CORSDirectives {
                 respondWithMediaType(MediaTypes.`application/json`) {
                   ctx =>
                     Configuration.log4j.info(s"Retrieving formatted table information for database=$database, tables= $tables")
-                    val future = ask(getMetadataActor, new GetFormattedTablesMessage(database, tables.toArray, userId))
+                    val future = ask(/*getMetadata*/hiveActor, new GetFormattedTablesMessage(database, tables.toArray, userId))
 
                     future.map {
                       case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
@@ -245,30 +245,32 @@ trait MetadataApi extends BaseApi with CORSDirectives {
    */
   private def schemaRoute = path("schema") {
     get {
-      parameters('path.as[String], 'sourceType.as[String], 'storageType.?) { (path, sourceType, storageType) =>
-        corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
-          validateCondition(!path.trim.isEmpty, Configuration.PATH_IS_EMPTY, StatusCodes.BadRequest) {
-            var validSourceType: SourceType = null
-            var validStorageType: StorageType = null
-            val validateParams = Try {
-              validSourceType = SchemaSettingsFactory.getSourceType(sourceType)
-              validStorageType = SchemaSettingsFactory.getStorageType(storageType.getOrElse("hdfs"))
-            }
-            respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-              validateParams match {
-                case Failure(e) =>
-                  Configuration.log4j.error(e.getMessage)
-                  ctx.complete(StatusCodes.InternalServerError, e.getMessage)
-                case Success(_) =>
-                  val schemaRequest: GetDatasourceSchemaMessage = GetDatasourceSchemaMessage(path, validSourceType,
-                                        validStorageType, hdfsConf)
-                  val future = ask(getDatasourceSchemaActor, schemaRequest)
-                  future.map {
-                    case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
-                    case result: String =>
-                      Configuration.log4j.info("Getting the data source schema was successful!")
-                      ctx.complete(StatusCodes.OK, result)
-                  }
+      securityFilter { userId =>
+        parameters('path.as[String], 'sourceType.as[String], 'storageType.?) { (path, sourceType, storageType) =>
+          corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
+            validateCondition(!path.trim.isEmpty, Configuration.PATH_IS_EMPTY, StatusCodes.BadRequest) {
+              var validSourceType: SourceType = null
+              var validStorageType: StorageType = null
+              val validateParams = Try {
+                validSourceType = SchemaSettingsFactory.getSourceType(sourceType)
+                validStorageType = SchemaSettingsFactory.getStorageType(storageType.getOrElse("hdfs"))
+              }
+              respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+                validateParams match {
+                  case Failure(e) =>
+                    Configuration.log4j.error(e.getMessage)
+                    ctx.complete(StatusCodes.InternalServerError, e.getMessage)
+                  case Success(_) =>
+                    val schemaRequest: GetDatasourceSchemaMessage = GetDatasourceSchemaMessage(path, validSourceType,
+                      validStorageType, hdfsConf, userId)
+                    val future = ask(/*getDatasourceSchema*/hiveActor, schemaRequest)
+                    future.map {
+                      case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
+                      case result: String =>
+                        Configuration.log4j.info("Getting the data source schema was successful!")
+                        ctx.complete(StatusCodes.OK, result)
+                    }
+                }
               }
             }
           }

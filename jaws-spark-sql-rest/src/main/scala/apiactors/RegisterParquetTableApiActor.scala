@@ -3,11 +3,11 @@ package apiactors
 import implementation.HiveContextWrapper
 import com.xpatterns.jaws.data.contracts.DAL
 import akka.actor.Actor
-import messages.RegisterTableMessage
+import messages.RegisterParquetTableMessage
 import server.Configuration
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
-import messages.UnregisterTableMessage
+import messages.UnregisterParquetTableMessage
 import scala.concurrent._
 import ExecutionContext.Implicits.global
 import scala.util.{ Success, Failure }
@@ -18,7 +18,7 @@ import java.io.{StringWriter, PrintWriter}
 class RegisterParquetTableApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Actor {
   override def receive = {
 
-    case message: RegisterTableMessage =>
+    case message: RegisterParquetTableMessage =>
       Configuration.log4j.info(s"[RegisterParquetTableApiActor]: registering table ${message.name} at ${message.path} " +
                                s"for user ${message.userId}")
       val currentSender = sender
@@ -37,7 +37,7 @@ class RegisterParquetTableApiActor(hiveContext: HiveContextWrapper, dals: DAL) e
       }
 
 
-    case message: UnregisterTableMessage =>
+    case message: UnregisterParquetTableMessage =>
       Configuration.log4j.info(s"[RegisterParquetTableApiActor]: Unregistering table ${message.name}")
       val currentSender = sender
 
