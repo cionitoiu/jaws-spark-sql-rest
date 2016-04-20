@@ -47,7 +47,22 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
   def initialize() = {
     Configuration.log4j.info("Initializing...")
 
-    hdfsConf = getHadoopConf
+    //Kerberos settings and inits
+    val conf = ConfigFactory.load
+    val kerberosConf = conf.getConfig("kerberosConf").withFallback(conf)
+    System.setProperty("java.security.krb5.realm", kerberosConf.getString("kerberos.realm"))
+    System.setProperty("java.security.krb5.kdc", kerberosConf.getString("kerberos.ip"))
+
+    val kConf = new org.apache.hadoop.conf.Configuration();
+    kConf.set("fs.defaultFS", "hdfs://scdh56-master.staging.xpatterns.com:8020");
+    kConf.set("fs.hdfs.impl", "org.apache.hadoop.hdfs.DistributedFileSystem");
+    kConf.set("hadoop.security.authentication", "Kerberos");
+    hdfsConf = getHadoopConf(kConf)
+    UserGroupInformation.setConfiguration(kConf);
+    UserGroupInformation.loginUserFromKeytab(kerberosConf.getString("principal.id"), kerberosConf.getString("keytabfile.path")) ;
+    realUgi = UserGroupInformation.getLoginUser
+
+
     Utils.createFolderIfDoesntExist(hdfsConf,
                                     Configuration.schemaFolder.getOrElse("jawsSchemaFolder"),
                                     forcedMode = false)
@@ -59,13 +74,6 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
       case _           => dals = new HdfsDal(hdfsConf)
     }
 
-    //Kerberos settings and inits
-    val conf = ConfigFactory.load
-    val kerberosConf = conf.getConfig("kerberosConf").withFallback(conf)
-    System.setProperty("java.security.krb5.realm", kerberosConf.getString("kerberos.realm"))
-    System.setProperty("java.security.krb5.kdc", kerberosConf.getString("kerberos.ip"))
-    realUgi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(kerberosConf.getString("principal.id"),
-                                                                   kerberosConf.getString("keytabfile.path")) ;
     //hiveContext = createHiveContext(dals)
   }
 
@@ -98,12 +106,12 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
     hContext
   }*/
 
-  def getHadoopConf: org.apache.hadoop.conf.Configuration = {
-    val configuration = new org.apache.hadoop.conf.Configuration()
+  def getHadoopConf (configuration: org.apache.hadoop.conf.Configuration) : org.apache.hadoop.conf.Configuration = {
+    //val configuration = new org.apache.hadoop.conf.Configuration()
     configuration.setBoolean(Utils.FORCED_MODE, Configuration.forcedMode.getOrElse("false").toBoolean)
 
     // set hadoop name node and job tracker
-    Configuration.namenode match {
+    /*Configuration.namenode match {
       case None =>
         val message = "You need to set the namenode! "
         Configuration.log4j.error(message)
@@ -113,7 +121,7 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
 
     }
 
-    configuration.set("dfs.replication", Configuration.replicationFactor.getOrElse("1"))
+    configuration.set("dfs.replication", Configuration.replicationFactor.getOrElse("1"))*/
 
     configuration.set(Utils.LOGGING_FOLDER, Configuration.loggingFolder.getOrElse("jawsLogs"))
     configuration.set(Utils.STATUS_FOLDER, Configuration.stateFolder.getOrElse("jawsStates"))

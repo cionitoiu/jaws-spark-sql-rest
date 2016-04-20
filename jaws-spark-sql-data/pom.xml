@@ -13,6 +13,17 @@
 		<spark.version>1.6.0</spark.version>
 	</properties>
 
+	<!--<repositories>
+		<repository>
+			<id>central</id>
+			<url>http://repo1.maven.org/maven/</url>
+		</repository>
+		<repository>
+			<id>cloudera</id>
+			<url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+		</repository>
+	</repositories>-->
+
 	<dependencies>
 		<dependency>
 			<groupId>org.scalamock</groupId>
@@ -136,6 +147,7 @@
 			<groupId>org.apache.hadoop</groupId>
 			<artifactId>hadoop-client</artifactId>
 			<version>2.6.0</version>
+			<!--<version>2.6.0-cdh5.6.0</version>-->
 			<exclusions>
 				<exclusion>
 					<groupId>asm</groupId>

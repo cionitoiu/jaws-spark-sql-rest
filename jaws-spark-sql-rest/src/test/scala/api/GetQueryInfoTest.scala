@@ -1,3 +1,4 @@
+/*
 package api
 
 import java.util.concurrent.TimeUnit
@@ -84,4 +85,4 @@ class GetQueryInfoTest extends FunSuite with BeforeAndAfter with ScalaFutures {
     dals.loggingDal.deleteQuery(queryId, "testUser")
 
   }
-}
+}*/

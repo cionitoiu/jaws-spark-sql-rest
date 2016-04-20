@@ -42,7 +42,7 @@ trait SecurityApi extends HttpService {
 
             //extract user id
             Option(jwtParts.getPayload.toJSONObject.get("sub").toString) match {
-              case Some(userId) => provide(userId)
+              case Some(userId) => provide(userId.split("@")(0))
               case None => complete("Incomplete authorization!") //Client.Error
             }
           } else {

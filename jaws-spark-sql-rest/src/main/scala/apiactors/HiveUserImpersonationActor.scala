@@ -396,11 +396,17 @@ class HiveUserImpersonationActor (realUgi: UserGroupInformation, dals: DAL,
       case message: Any => Configuration.log4j.error(message.toString)
     }
 
+  /**
+    * Hive context creation using user impersonation
+    * @param userId
+    * @return
+    */
     private def createHiveContext(userId: String): HiveContextWrapper = {
       val jars = Configuration.jarPath.get.split(",")
 
       def configToSparkConf(config: Config, contextName: String, jars: Array[String]): SparkConf = {
         val sparkConf = new SparkConf().setAppName(contextName).setJars(jars)
+        sparkConf.setMaster("yarn-client")
         for (
           property <- config.entrySet().asScala if property.getKey.startsWith("spark") && property.getValue != null
         ) {
