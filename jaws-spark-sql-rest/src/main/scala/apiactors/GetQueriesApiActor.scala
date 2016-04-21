@@ -18,7 +18,7 @@ class GetQueriesApiActor(dals: DAL) extends Actor {
 
       Configuration.log4j.info("[GetQueriesApiActor]: retrieving " + message.limit +
         " number of queries starting with " + message.startQueryID + " for user" + message.userId)
-      val currentSender = sender()
+      val currentSender = sender
       val getQueriesFuture = future {
         dals.loggingDal.getQueries(message.startQueryID, message.limit, message.userId)
       }
@@ -31,7 +31,7 @@ class GetQueriesApiActor(dals: DAL) extends Actor {
     case message: GetQueriesMessage =>
       Configuration.log4j.info("[GetQueryInfoApiActor]: retrieving the query information for " + message.queryIDs)
 
-      val currentSender = sender()
+      val currentSender = sender
 
       val getQueryInfoFuture = future {
         dals.loggingDal.getQueries(message.queryIDs, message.userId)
@@ -45,7 +45,7 @@ class GetQueriesApiActor(dals: DAL) extends Actor {
     case message: GetQueriesByName =>
       Configuration.log4j.info("[GetQueryInfoApiActor]: retrieving the queries for " + message.name)
 
-      val currentSender = sender()
+      val currentSender = sender
 
       val getQueryInfoFuture = future {
         dals.loggingDal.getQueriesByName(message.name, message.userId)
@@ -59,7 +59,7 @@ class GetQueriesApiActor(dals: DAL) extends Actor {
     case message: GetPublishedQueries =>
       Configuration.log4j.info("[GetQueryInfoApiActor]: retrieving the published queries ")
 
-      val currentSender = sender()
+      val currentSender = sender
 
       val getQueryInfoFuture = future {
         dals.loggingDal.getPublishedQueries(message.userId)

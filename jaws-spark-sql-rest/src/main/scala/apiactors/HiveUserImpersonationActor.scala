@@ -79,7 +79,7 @@ class HiveUserImpersonationActor (realUgi: UserGroupInformation, dals: DAL,
         val path: String = s"${message.path}"
         Configuration.log4j.info(s"Getting the data source schema for path $path, sourceType ${message.sourceType}, " +
                                  s"storageType ${message.storageType}")
-        val currentSender = sender()
+        val currentSender = sender
 
         val getDatasourceSchemaFuture = future {
           var result: StructType = null
@@ -319,7 +319,7 @@ class HiveUserImpersonationActor (realUgi: UserGroupInformation, dals: DAL,
           writeLaunchStatus(uuid, message.script, message.userId)
           threadPool.execute(task)
         }
-        returnResult(tryRun, uuid, "run query failed with the following message: ", sender())
+        returnResult(tryRun, uuid, "run query failed with the following message: ", sender)
 
       case message:RunQueryMessage =>
         val hiveRQMContext = impersonateUser(message.userId, parquetInit=false)
@@ -354,7 +354,7 @@ class HiveUserImpersonationActor (realUgi: UserGroupInformation, dals: DAL,
           writeLaunchStatus(uuid, query.query, message.userId)
           threadPool.execute(task)
         }
-        returnResult(tryRunMessage, uuid, "run query failed with the following message: ", sender())
+        returnResult(tryRunMessage, uuid, "run query failed with the following message: ", sender)
 
       case message: RunParquetMessage =>
         val hiveRPMContext = impersonateUser(message.userId, parquetInit=false)
@@ -371,7 +371,7 @@ class HiveUserImpersonationActor (realUgi: UserGroupInformation, dals: DAL,
           writeLaunchStatus(uuid, message.script, message.userId)
           threadPool.execute(task)
         }
-        returnResult(tryRunParquet, uuid, "run parquet query failed with the following message: ", sender())
+        returnResult(tryRunParquet, uuid, "run parquet query failed with the following message: ", sender)
 
       case message: CancelMessage =>
         val hiveCContext = impersonateUser(message.userId, parquetInit=false)

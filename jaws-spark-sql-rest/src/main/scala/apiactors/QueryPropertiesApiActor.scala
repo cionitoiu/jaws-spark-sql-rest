@@ -21,7 +21,7 @@ class QueryPropertiesApiActor (dals: DAL) extends Actor {
       Configuration.log4j.info(s"[QueryPropertiesApiActor]: updating query id ${message.queryID} with " +
                                s"name ${message.name} for user ${message.userId}")
 
-      val currentSender = sender()
+      val currentSender = sender
 
       val updateQueryFuture = future {
         dals.loggingDal.getState(message.queryID, message.userId) match {

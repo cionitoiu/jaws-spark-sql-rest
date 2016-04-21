@@ -53,13 +53,13 @@ class RunScriptApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
         writeLaunchStatus(uuid, message.script, message.userId)
         threadPool.execute(task)
       }
-      returnResult(tryRun, uuid, "run query failed with the following message: ", sender())
+      returnResult(tryRun, uuid, "run query failed with the following message: ", sender)
 
     case message:RunQueryMessage =>
       val uuid = System.currentTimeMillis() + UUID.randomUUID().toString
       val tryRunMessage = Try {
         // Make sure that there is a query with the sent name
-        val queryName = message.name.trim()
+        val queryName = message.name.trim
         val queries = dals.loggingDal.getQueriesByName(queryName, message.userId).queries
         if (queries.length == 0 || queries(0).query == null) {
           throw new Exception(s"There is no query with the name $queryName")
@@ -87,7 +87,7 @@ class RunScriptApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
         writeLaunchStatus(uuid, query.query, message.userId)
         threadPool.execute(task)
       }
-      returnResult(tryRunMessage, uuid, "run query failed with the following message: ", sender())
+      returnResult(tryRunMessage, uuid, "run query failed with the following message: ", sender)
 
     case message: RunParquetMessage =>
       val uuid = System.currentTimeMillis() + UUID.randomUUID().toString
@@ -103,7 +103,7 @@ class RunScriptApiActor(hiveContext: HiveContextWrapper, dals: DAL) extends Acto
         writeLaunchStatus(uuid, message.script, message.userId)
         threadPool.execute(task)
       }
-      returnResult(tryRunParquet, uuid, "run parquet query failed with the following message: ", sender())
+      returnResult(tryRunParquet, uuid, "run parquet query failed with the following message: ", sender)
 
     case message: CancelMessage =>
       Configuration.log4j.info("[RunScriptApiActor]: Canceling the jobs for the following uuid: " + message.queryID +

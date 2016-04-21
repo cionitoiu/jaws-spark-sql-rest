@@ -25,7 +25,7 @@ class GetDatasourceSchemaActor(hiveContext: HiveContextWrapper) extends Actor {
       val hostname: String = Configuration.rddDestinationIp.get
       val path: String = s"${request.path}"
       Configuration.log4j.info(s"Getting the data source schema for path $path, sourceType ${request.sourceType}, storageType ${request.storageType}")
-      val currentSender = sender()
+      val currentSender = sender
 
       val getDatasourceSchemaFuture = future {
         var result: StructType = null
