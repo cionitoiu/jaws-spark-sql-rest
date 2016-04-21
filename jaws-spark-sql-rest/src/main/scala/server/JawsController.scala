@@ -48,10 +48,8 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
     Configuration.log4j.info("Initializing...")
 
     //Kerberos settings and inits
-    val conf = ConfigFactory.load
-    val kerberosConf = conf.getConfig("kerberosConf").withFallback(conf)
-    System.setProperty("java.security.krb5.realm", kerberosConf.getString("kerberos.realm"))
-    System.setProperty("java.security.krb5.kdc", kerberosConf.getString("kerberos.ip"))
+    System.setProperty("java.security.krb5.realm", Configuration.kerberosRealm.get)
+    System.setProperty("java.security.krb5.kdc", Configuration.kerberosIP.get)
 
     val kConf = new org.apache.hadoop.conf.Configuration();
     kConf.set("fs.defaultFS", "hdfs://scdh56-master.staging.xpatterns.com:8020");
@@ -59,7 +57,7 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
     kConf.set("hadoop.security.authentication", "Kerberos");
     hdfsConf = getHadoopConf(kConf)
     UserGroupInformation.setConfiguration(kConf);
-    UserGroupInformation.loginUserFromKeytab(kerberosConf.getString("principal.id"), kerberosConf.getString("keytabfile.path")) ;
+    UserGroupInformation.loginUserFromKeytab(Configuration.kerberosPrincipal.get, Configuration.kerberosKeytab.get) ;
     realUgi = UserGroupInformation.getLoginUser
 
 

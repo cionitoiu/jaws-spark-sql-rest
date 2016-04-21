@@ -7,7 +7,7 @@ import java.security._
 
 import apiactors.ActorOperations._
 import com.google.common.cache.{CacheBuilder, Cache}
-import com.typesafe.config.Config
+import com.typesafe.config.{ConfigFactory, Config}
 import com.xpatterns.jaws.data.DTO._
 import com.xpatterns.jaws.data.utils.Utils._
 import com.xpatterns.jaws.data.utils._
@@ -407,6 +407,8 @@ class HiveUserImpersonationActor (realUgi: UserGroupInformation, dals: DAL,
       def configToSparkConf(config: Config, contextName: String, jars: Array[String]): SparkConf = {
         val sparkConf = new SparkConf().setAppName(contextName).setJars(jars)
         sparkConf.setMaster("yarn-client")
+        sparkConf.set("spark.yarn.principal", Configuration.kerberosPrincipal.get)
+        sparkConf.set("spark.yarn.keytab", Configuration.kerberosKeytab.get)
         for (
           property <- config.entrySet().asScala if property.getKey.startsWith("spark") && property.getValue != null
         ) {

@@ -20,6 +20,7 @@ object Configuration {
   val appConf = conf.getConfig("appConf")
   val hadoopConf = conf.getConfig("hadoopConf")
   val cassandraConf = conf.getConfig("cassandraConf")
+  val kerberosConf = conf.getConfig("kerberosConf")
 
   // cassandra configuration
   val cassandraHost = getStringConfiguration(cassandraConf, "cassandra.host")
@@ -39,6 +40,12 @@ object Configuration {
   val queryUnpublishedFolder = getStringConfiguration(hadoopConf, "queryUnpublishedFolder")
   val namenode = getStringConfiguration(hadoopConf, "namenode")
   val parquetTablesFolder = getStringConfiguration(hadoopConf, "parquetTablesFolder")
+
+  //kerberos configuration
+  val kerberosPrincipal = getStringConfiguration(kerberosConf, "principal.id")
+  val kerberosKeytab = getStringConfiguration(kerberosConf, "keytabfile.path")
+  val kerberosRealm= getStringConfiguration(kerberosConf, "kerberos.realm")
+  val kerberosIP = getStringConfiguration(kerberosConf, "kerberos.ip")
 
   //app configuration
   val serverInterface = getStringConfiguration(appConf, "server.interface")
