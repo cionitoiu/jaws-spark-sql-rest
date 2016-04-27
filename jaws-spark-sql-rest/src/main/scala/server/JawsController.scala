@@ -72,54 +72,11 @@ object JawsController extends App with UIApi with IndexApi with ParquetApi with 
       case _           => dals = new HdfsDal(hdfsConf)
     }
 
-    //hiveContext = createHiveContext(dals)
   }
 
-  /*def createHiveContext(dal: DAL): HiveContextWrapper = {
-    val jars = Configuration.jarPath.get.split(",")
-
-    def configToSparkConf(config: Config, contextName: String, jars: Array[String]): SparkConf = {
-      val sparkConf = new SparkConf().setAppName(contextName).setJars(jars)
-      for (
-        property <- config.entrySet().asScala if property.getKey.startsWith("spark") && property.getValue != null
-      ) {
-        val key = property.getKey.replaceAll("-", ".")
-        println(key + " | " + property.getValue.unwrapped())
-        sparkConf.set(key, property.getValue.unwrapped().toString)
-      }
-      sparkConf
-    }
-
-    val hContext: HiveContextWrapper = {
-      val sparkConf = configToSparkConf(Configuration.sparkConf, Configuration.applicationName.getOrElse("Jaws"), jars)
-      val sContext = new SparkContext(sparkConf)
-      sContext.addSparkListener(new LoggingListener(dal, "tempUser"))
-
-      val hContext = new HiveContextWrapper(sContext)
-      HiveUtils.setSharkProperties(hContext, this.getClass.getClassLoader.getResourceAsStream("sharkSettings.txt"))
-      //make sure that lazy variable hiveConf gets initialized
-      hContext.runMetadataSql("use default")
-      hContext
-    }
-    hContext
-  }*/
 
   def getHadoopConf (configuration: org.apache.hadoop.conf.Configuration) : org.apache.hadoop.conf.Configuration = {
-    //val configuration = new org.apache.hadoop.conf.Configuration()
     configuration.setBoolean(Utils.FORCED_MODE, Configuration.forcedMode.getOrElse("false").toBoolean)
-
-    // set hadoop name node and job tracker
-    /*Configuration.namenode match {
-      case None =>
-        val message = "You need to set the namenode! "
-        Configuration.log4j.error(message)
-        throw new RuntimeException(message)
-
-      case _ => configuration.set("fs.defaultFS", Configuration.namenode.get)
-
-    }
-
-    configuration.set("dfs.replication", Configuration.replicationFactor.getOrElse("1"))*/
 
     configuration.set(Utils.LOGGING_FOLDER, Configuration.loggingFolder.getOrElse("jawsLogs"))
     configuration.set(Utils.STATUS_FOLDER, Configuration.stateFolder.getOrElse("jawsStates"))

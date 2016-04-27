@@ -7,7 +7,7 @@ import java.security._
 
 import apiactors.ActorOperations._
 import com.google.common.cache.{CacheBuilder, Cache}
-import com.typesafe.config.{ConfigFactory, Config}
+import com.typesafe.config.Config
 import com.xpatterns.jaws.data.DTO._
 import com.xpatterns.jaws.data.utils.Utils._
 import com.xpatterns.jaws.data.utils._
@@ -36,6 +36,11 @@ import implementation.HiveContextWrapper
 import scala.concurrent._
 import scala.util.{Try, Failure, Success}
 
+
+trait DescriptionType
+case class Extended() extends DescriptionType
+case class Formatted() extends DescriptionType
+case class Regular() extends DescriptionType
 
 /**
   * Created by cristianionitoiu on 15/04/16.

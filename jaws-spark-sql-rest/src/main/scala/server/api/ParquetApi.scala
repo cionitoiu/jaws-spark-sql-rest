@@ -1,13 +1,7 @@
 package server.api
 
-import apiactors.ActorsPaths._
-import apiactors.{RegisterParquetTableApiActor, GetParquetTablesApiActor}
-import com.xpatterns.jaws.data.utils.Utils
-import com.xpatterns.jaws.data.utils.Utils._
 import server.Configuration
-import server.MainActors._
 import scala.concurrent.ExecutionContext.Implicits.global
-import akka.actor.{Props, ActorRef}
 import akka.pattern.ask
 import customs.CORSDirectives
 import messages._
@@ -16,9 +10,8 @@ import spray.http.{ StatusCodes, HttpHeaders, HttpMethods, MediaTypes }
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.marshalling.ToResponseMarshallable.isMarshallable
 import spray.json.DefaultJsonProtocol._
-import scala.concurrent.duration.Duration._
-import scala.util.{Failure, Success, Try}
-import scala.concurrent.{Await, Future}
+import scala.util.Try
+import scala.concurrent.Future
 import spray.routing.Route
 import scala.collection.mutable.ArrayBuffer
 import customs.CustomDirectives._
@@ -28,50 +21,6 @@ import customs.CustomDirectives._
  * Handles the api for parquet operations
  */
 trait ParquetApi extends BaseApi with CORSDirectives {
-  // Handles the parquet tables operations
-  //lazy val getParquetTablesActor: ActorRef = createActor(Props(new GetParquetTablesApiActor(hiveContext, dals)),
-   // GET_PARQUET_TABLES_ACTOR_NAME, localSupervisor)
-
-  // Handles the registering of parquet tables
-  //lazy val registerParquetTableActor = createActor(Props(new RegisterParquetTableApiActor(hiveContext, dals)), REGISTER_PARQUET_TABLE_ACTOR_NAME, remoteSupervisor)
-
-  /**
-   * Initialize the parquet tables. Each time the server is started the parquet files, that are used as tables, are
-   * registered as temporary table.
-   */
-  def initializeParquetTables(userId: String) {
-    Configuration.log4j.info("Initializing parquet tables on the current spark context for user " + userId)
-    val parquetTables = dals.parquetTableDal.listParquetTables(userId)
-
-    parquetTables.foreach(pTable => {
-      val newConf = new org.apache.hadoop.conf.Configuration(hdfsConf)
-      newConf.set("fs.defaultFS", pTable.namenode)
-      if (Utils.checkFileExistence(pTable.filePath, newConf)) {
-        // Send message to register the parquet table
-        val future = ask(/*registerParquetTable*/hiveActor, RegisterParquetTableMessage(pTable.name, pTable.filePath, pTable.namenode, userId))
-
-        // When registering is complete display the proper message or in case of failure delete the table.
-        Await.ready(future, Inf).value.get match {
-          case Success(x) => x match {
-            case e: ErrorMessage =>
-              Configuration.log4j.warn(s"The table ${pTable.name} at path ${pTable.filePath} failed during registration " +
-                                       s"with message : \n ${e.message}\n The table will be deleted!")
-              dals.parquetTableDal.deleteParquetTable(pTable.name, userId)
-
-            case result: String => Configuration.log4j.info(result)
-          }
-          case Failure(ex) =>
-            Configuration.log4j.warn(s"The table ${pTable.name} at path ${pTable.filePath} failed during registration " +
-                                     s"with the following stack trace : \n ${getCompleteStackTrace(ex)}\n The table will be deleted!")
-            dals.parquetTableDal.deleteParquetTable(pTable.name, userId)
-        }
-
-      } else {
-        Configuration.log4j.warn(s"The table ${pTable.name} doesn't exists at path ${pTable.filePath}. The table will be deleted")
-        dals.parquetTableDal.deleteParquetTable(pTable.name, userId)
-      }
-    })
-  }
 
   /**
    * Handles the calls to <b>/jaws/parquet/</b>
@@ -114,7 +63,7 @@ trait ParquetApi extends BaseApi with CORSDirectives {
                           Configuration.TABLE_ALREADY_EXISTS_EXCEPTION_MESSAGE, StatusCodes.BadRequest) {
                           respondWithMediaType(MediaTypes.`text/plain`) { ctx =>
                             Configuration.log4j.info(s"The tablePath is $tablePath on namenode $pathType and the table name is $table")
-                            val future = ask(/*runScript*/hiveActor,
+                            val future = ask(hiveActor,
                                              RunParquetMessage(query, tablePath, getNamenodeFromPathType(pathType),
                                                                table, limited, numberOfResults, destination, userId, hdfsConf))
                             future.map {
@@ -161,7 +110,9 @@ trait ParquetApi extends BaseApi with CORSDirectives {
       parquetTablePostRoute ~ parquetTableGetRoute
     } ~ parquetTableDeleteRoute ~
     options {
-      corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*")), HttpHeaders.`Access-Control-Allow-Methods`(Seq(HttpMethods.OPTIONS, HttpMethods.POST, HttpMethods.DELETE, HttpMethods.GET))) {
+      corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*")),
+                HttpHeaders.`Access-Control-Allow-Methods`(Seq(HttpMethods.OPTIONS, HttpMethods.POST,
+                                                               HttpMethods.DELETE, HttpMethods.GET))) {
         complete {
           "OK"
         }
@@ -249,7 +200,7 @@ trait ParquetApi extends BaseApi with CORSDirectives {
               case (key, value) => Configuration.log4j.warn(s"Unknown parameter $key!")
             }
             Configuration.log4j.info(s"Retrieving table information for parquet tables= $tables")
-            val future = ask(/*getParquetTables*/hiveActor, new GetParquetTablesMessage(tables.toArray, describe, userId))
+            val future = ask(hiveActor, new GetParquetTablesMessage(tables.toArray, describe, userId))
 
             future.map {
               case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)

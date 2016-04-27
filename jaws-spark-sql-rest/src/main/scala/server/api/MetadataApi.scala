@@ -1,14 +1,10 @@
 package server.api
 
-import apiactors.ActorsPaths._
-import apiactors.{GetDatasourceSchemaActor, GetMetadataApiActor}
 import customs.CustomDirectives._
 import implementation.SchemaSettingsFactory
 import implementation.SchemaSettingsFactory.{StorageType, SourceType}
 import server.Configuration
-import server.MainActors._
 import scala.concurrent.ExecutionContext.Implicits.global
-import akka.actor.Props
 import akka.pattern.ask
 import customs.CORSDirectives
 import messages._
@@ -24,12 +20,6 @@ import scala.collection.mutable.ArrayBuffer
  * Handles the tables api requests
  */
 trait MetadataApi extends BaseApi with CORSDirectives {
-  // Actor used for getting metadata about the tables
-  //lazy val getMetadataActor = createActor(Props(new GetMetadataApiActor(hiveContext, dals)), GET_TABLES_ACTOR_NAME, localSupervisor)
-
-  // Actor used for getting information about the schema
-  //lazy val getDatasourceSchemaActor = createActor(Props(new GetDatasourceSchemaActor(hiveContext)), GET_DATASOURCE_SCHEMA_ACTOR_NAME, localSupervisor)
-
   /**
    * Manages the calls used for getting the metadata about tables, databases and its schema. It handles the following
    * calls:
@@ -52,7 +42,7 @@ trait MetadataApi extends BaseApi with CORSDirectives {
       securityFilter { userId =>
         corsFilter(List(Configuration.corsFilterAllowedHosts.getOrElse("*"))) {
           respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-            val future = ask(/*getMetadataActor*/hiveActor, GetDatabasesMessage(userId))
+            val future = ask(hiveActor, GetDatabasesMessage(userId))
             future.map {
               case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
               case result: Databases => ctx.complete(StatusCodes.OK, result)
@@ -115,7 +105,7 @@ trait MetadataApi extends BaseApi with CORSDirectives {
               val (database, describe, tables) = getTablesParameters(params)
 
               Configuration.log4j.info(s"Retrieving table information for database=$database, tables= $tables, with describe flag set on: $describe")
-              val future = ask(/*getMetadata*/hiveActor, new GetTablesMessage(database, describe, tables, userId))
+              val future = ask(hiveActor, new GetTablesMessage(database, describe, tables, userId))
 
               future.map {
                 case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
@@ -160,7 +150,7 @@ trait MetadataApi extends BaseApi with CORSDirectives {
                 ctx =>
 
                   Configuration.log4j.info(s"Retrieving extended table information for database=$database, tables= $tables")
-                  val future = ask(/*getMetadata*/hiveActor, new GetExtendedTablesMessage(database, tables, userId))
+                  val future = ask(hiveActor, new GetExtendedTablesMessage(database, tables, userId))
 
                   future.map {
                     case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
@@ -207,7 +197,7 @@ trait MetadataApi extends BaseApi with CORSDirectives {
                 respondWithMediaType(MediaTypes.`application/json`) {
                   ctx =>
                     Configuration.log4j.info(s"Retrieving formatted table information for database=$database, tables= $tables")
-                    val future = ask(/*getMetadata*/hiveActor, new GetFormattedTablesMessage(database, tables.toArray, userId))
+                    val future = ask(hiveActor, new GetFormattedTablesMessage(database, tables.toArray, userId))
 
                     future.map {
                       case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
@@ -263,7 +253,7 @@ trait MetadataApi extends BaseApi with CORSDirectives {
                   case Success(_) =>
                     val schemaRequest: GetDatasourceSchemaMessage = GetDatasourceSchemaMessage(path, validSourceType,
                       validStorageType, hdfsConf, userId)
-                    val future = ask(/*getDatasourceSchema*/hiveActor, schemaRequest)
+                    val future = ask(hiveActor, schemaRequest)
                     future.map {
                       case e: ErrorMessage => ctx.complete(StatusCodes.InternalServerError, e.message)
                       case result: String =>

@@ -3,11 +3,8 @@ package server.api
 import akka.actor.{Props, ActorRef}
 import akka.util.Timeout
 import java.util.concurrent.TimeUnit
-import apiactors.{BalancerActor, RunScriptApiActor}
-import com.xpatterns.jaws.data.contracts.DAL
-import implementation.HiveContextWrapper
+import apiactors.BalancerActor
 import server.Configuration
-import spray.routing.HttpService
 import server.MainActors._
 import apiactors.ActorsPaths._
 
@@ -17,20 +14,6 @@ import apiactors.ActorsPaths._
 trait BaseApi extends SecurityApi {
   // The default timeout for the futures
   implicit val timeout = Timeout(Configuration.timeout.toInt, TimeUnit.MILLISECONDS)
-
-  // The hdfs configuration that is initialized when the server starts
-  //var hdfsConf: org.apache.hadoop.conf.Configuration = _
-
-  // The hive context that is initialized when the server starts
-  //var hiveContext: HiveContextWrapper = _
-
-
-
-  // The actor that is handling the scripts that are run on Hive or Spark SQL. This field is lazy because the hdfs
-  // configuration and the hive context are not initialized at the moment of creating the object.
-  //lazy val runScriptActor = createActor(Props(new RunScriptApiActor(hiveContext, dals)), RUN_SCRIPT_ACTOR_NAME, remoteSupervisor)
-
-
 
   // The actor that is handling the parquet tables
   lazy val balancerActor = createActor(Props(classOf[BalancerActor]), BALANCER_ACTOR_NAME, remoteSupervisor)

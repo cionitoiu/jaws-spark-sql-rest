@@ -28,7 +28,8 @@ trait SecurityApi extends HttpService {
   //Holds Jaws user group information initialized at server start-up
   var realUgi : UserGroupInformation = _
 
-  lazy val hiveActor = createActor(Props(new HiveUserImpersonationActor(realUgi, dals, hdfsConf)), HIVE_ACTOR_NAME, remoteSupervisor)
+  lazy val hiveActor = createActor(Props(new HiveUserImpersonationActor(realUgi, dals, hdfsConf)),
+                                   HIVE_ACTOR_NAME, remoteSupervisor)
 
   def securityFilter: Directive1[String] = {
     optionalHeaderValueByName("Authorization").flatMap {
